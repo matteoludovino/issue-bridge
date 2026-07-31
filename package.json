@@ -1,0 +1,31 @@
+{
+  "name": "issue-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de migração de issues entre trackers (hexagonal, ports & adapters)",
+  "type": "module",
+  "bin": {
+    "issue-bridge": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "yaml": "^2.9.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.3"
+  }
+}
