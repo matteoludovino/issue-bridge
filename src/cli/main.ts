@@ -4,6 +4,7 @@ import {
   createAttachmentFetcher,
   createRollbackStore,
   createSourceAdapter,
+  createSyncStateStore,
   createTargetAdapter,
 } from '../composition.js';
 import { loadConfig } from '../config/loader.js';
@@ -18,6 +19,7 @@ import {
   runLedger,
   runLogin,
   runReport,
+  runSync,
   type CommandDeps,
 } from './commands.js';
 
@@ -51,6 +53,7 @@ async function buildDeps(globals: GlobalOptions): Promise<CommandDeps> {
     target: createTargetAdapter(loaded, logger),
     store: await createRollbackStore(loaded),
     attachments: createAttachmentFetcher(loaded),
+    syncState: createSyncStateStore(loaded),
     logger,
     clock: { now: () => new Date().toISOString() },
   };
@@ -139,6 +142,26 @@ function main(): void {
           // Progresso só faz sentido em saída humana.
           progress: globalsOf(program).json !== true && globalsOf(program).quiet !== true,
           ...(typeof options['plan'] === 'string' ? { plan: options['plan'] } : {}),
+          ...(options['dryRun'] === true ? { dryRun: true } : {}),
+          ...(options['yes'] === true ? { yes: true } : {}),
+        }),
+      ),
+    );
+
+  program
+    .command('sync')
+    .description('migra só o que mudou desde o último sync; sem --yes roda em simulação')
+    .option('--since <iso>', 'sobrescreve a marca d’água (ex.: 2026-03-01T00:00:00Z)')
+    .option('--full', 'ignora a marca d’água e relê a origem inteira')
+    .option('--dry-run', 'simula explicitamente')
+    .option('--yes', 'confirma a escrita real no destino')
+    .action(
+      run(async (deps, options) =>
+        runSync(deps, {
+          outDir: options['outDir'] as string,
+          progress: globalsOf(program).json !== true && globalsOf(program).quiet !== true,
+          ...(typeof options['since'] === 'string' ? { since: options['since'] } : {}),
+          ...(options['full'] === true ? { full: true } : {}),
           ...(options['dryRun'] === true ? { dryRun: true } : {}),
           ...(options['yes'] === true ? { yes: true } : {}),
         }),

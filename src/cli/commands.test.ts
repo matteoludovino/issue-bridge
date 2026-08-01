@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseConfig } from '../config/loader.js';
 import { InMemoryRollbackStore } from '../core/executor/in-memory-rollback-store.js';
+import { SyncStateStore } from '../storage/sync-state.js';
 import {
   FakeAttachmentFetcher,
   FakeSourceAdapter,
@@ -15,7 +16,16 @@ import {
   makeMilestone,
   makeModel,
 } from '../core/testing/fixtures.js';
-import { EXIT, runAnalyze, runApply, runExport, runLedger, runLogin, runReport } from './commands.js';
+import {
+  EXIT,
+  runAnalyze,
+  runApply,
+  runExport,
+  runLedger,
+  runLogin,
+  runReport,
+  runSync,
+} from './commands.js';
 import type { CommandDeps } from './commands.js';
 
 const CONFIG_YAML = `
@@ -60,6 +70,7 @@ describe('comandos da CLI', () => {
       logger,
       clock: { now: () => '2026-03-01T00:00:00Z' },
       attachments: new FakeAttachmentFetcher(),
+      syncState: new SyncStateStore(join(outDir, 'sync-state.json')),
       sleeper: new RecordingSleeper(),
       write: (text) => stdout.push(text),
     };
@@ -193,6 +204,85 @@ describe('comandos da CLI', () => {
     const afterApply = join(outDir, 'exec-report.md');
     await runReport(deps, { outDir, out: afterApply });
     expect(await readFile(afterApply, 'utf8')).toContain('— execução');
+  });
+
+  describe('sync incremental', () => {
+    it('primeira execução lê tudo e avança a marca d’água', async () => {
+      const code = await runSync(deps, { outDir, yes: true });
+
+      expect(code).toBe(EXIT.ok);
+      // Sem marca anterior: extração sem filtro de data.
+      expect(source.extractCalls[0]?.updatedSince).toBeUndefined();
+      expect(await deps.syncState?.read('acme/api')).toEqual({
+        version: 1,
+        identifier: 'acme/api',
+        lastSyncedAt: '2026-03-01T00:00:00Z',
+      });
+    });
+
+    it('segunda execução filtra pela marca e não reescreve nada', async () => {
+      await runSync(deps, { outDir, yes: true });
+      const postsAfterFirst = target.calls.length;
+
+      const second = new FakeSourceAdapter(model);
+      const code = await runSync({ ...deps, source: second }, { outDir, yes: true });
+
+      expect(code).toBe(EXIT.ok);
+      expect(second.extractCalls[0]?.updatedSince).toBe('2026-03-01T00:00:00Z');
+      // Idempotência: mesmo relendo os mesmos itens, nada novo é criado.
+      expect(target.calls.length).toBe(postsAfterFirst + 1); // só discoverCapabilities
+      expect(target.calls.at(-1)).toBe('discoverCapabilities:ENG');
+    });
+
+    it('--full ignora a marca e relê a origem inteira', async () => {
+      await runSync(deps, { outDir, yes: true });
+
+      const second = new FakeSourceAdapter(model);
+      await runSync({ ...deps, source: second }, { outDir, yes: true, full: true });
+
+      expect(second.extractCalls[0]?.updatedSince).toBeUndefined();
+    });
+
+    it('--since sobrescreve a marca gravada', async () => {
+      await runSync(deps, { outDir, yes: true });
+
+      const second = new FakeSourceAdapter(model);
+      await runSync(
+        { ...deps, source: second },
+        { outDir, yes: true, since: '2025-01-01T00:00:00Z' },
+      );
+
+      expect(second.extractCalls[0]?.updatedSince).toBe('2025-01-01T00:00:00Z');
+    });
+
+    it('simulação NÃO avança a marca', async () => {
+      const code = await runSync(deps, { outDir });
+
+      expect(code).toBe(EXIT.ok);
+      expect(logger.warns.join(' ')).toContain('SIMULAÇÃO');
+      // Avançar aqui esconderia itens que nunca chegaram ao destino.
+      expect(await deps.syncState?.read('acme/api')).toBeNull();
+    });
+
+    it('falha NÃO avança a marca', async () => {
+      target.failingSourceIds.add('fake:acme/api:issue:1');
+
+      const code = await runSync(deps, { outDir, yes: true });
+
+      expect(code).toBe(EXIT.problems);
+      expect(await deps.syncState?.read('acme/api')).toBeNull();
+    });
+
+    it('origem sem novidade avança a marca sem escrever nada', async () => {
+      const vazia = new FakeSourceAdapter(makeModel({ issues: [] }));
+
+      const code = await runSync({ ...deps, source: vazia }, { outDir, yes: true });
+
+      expect(code).toBe(EXIT.ok);
+      expect(logger.infos.join(' ')).toContain('Nada novo');
+      expect(target.calls.filter((call) => call.startsWith('createIssue'))).toEqual([]);
+      expect(await deps.syncState?.read('acme/api')).not.toBeNull();
+    });
   });
 
   it('ledger lista as correspondências e suporta JSON no stdout', async () => {

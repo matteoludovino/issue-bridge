@@ -31,6 +31,7 @@ issue-bridge export     # extrai a origem para .issue-bridge/snapshot.json
 issue-bridge analyze    # gera plano + relatório, sem escrever no destino
 issue-bridge apply      # SIMULAÇÃO (sem --yes)
 issue-bridge apply --yes
+issue-bridge sync --yes # migra só o que mudou desde o último sync
 issue-bridge report     # regera o relatório dos artefatos
 issue-bridge ledger     # mapa origem → destino
 ```
@@ -67,6 +68,38 @@ Tudo em `.issue-bridge/` (mude com `-o`):
 | `execution.json` | Resultado de cada ação, com tentativas gastas |
 | `migration-report.md` | Relatório legível |
 | `ledger.json` | Mapa origem → destino |
+| `sync-state.json` | Marca d'água: até quando a origem já foi lida |
+
+## Sync incremental
+
+`sync` lê da origem apenas o que mudou desde a última execução bem-sucedida
+(`since` na API do GitHub, que filtra por data de alteração), aplica, e só então
+avança a marca d'água.
+
+- A marca gravada é o instante de **início** da extração. Item alterado durante a
+  execução cai na próxima janela em vez de ser perdido — o custo é reprocessar
+  alguns itens, que a idempotência do ledger absorve.
+- **Simulação e falha não avançam a marca.** Avançar ali esconderia itens que
+  nunca chegaram ao destino.
+- `--since <iso>` sobrescreve a marca; `--full` a ignora e relê tudo.
+- Apagar `sync-state.json` força releitura completa **sem** perder as
+  correspondências já criadas — são registros separados de propósito.
+
+O que `sync` **traz**: issues novas, comentários novos, mudança de status.
+O que `sync` **não traz**: alteração de título, corpo, labels ou responsável de
+item já migrado — o plano não tem ação de atualização, só de criação.
+
+## Paralelismo
+
+`execution.concurrency` (padrão 4) controla quantas ações independentes são
+escritas ao mesmo tempo. O escalonador usa o `dependsOn` do plano: uma ação só
+começa quando todas as dependências concluíram, e se alguma falhou, os
+dependentes são descartados sem gastar tentativa.
+
+Acima de ~8 o rate limit do destino costuma virar o gargalo (o retry absorve, mas
+fica mais lento). Use `concurrency: 1` para depurar com ordem determinística — os
+resultados no relatório saem sempre na ordem do plano, independente da
+concorrência.
 
 ## Por que `ledger` e não `rollback`
 
@@ -95,12 +128,10 @@ São limites reais das APIs envolvidas, não pendências de implementação:
   `analyze` não consegue validar alcançabilidade de status com precisão.
 - **Custom field obrigatório** precisa de valor em `mappings.fields`; sem isso o
   `analyze` bloqueia (de propósito — melhor que falhar no meio da escrita).
-- **`sync` incremental não existe**: a extração não filtra por data de alteração.
-  Reexecutar é seguro, mas relê o repositório inteiro.
+- **`sync` não propaga atualização** de item já migrado (ver acima): não existe
+  ação de atualização no plano, só de criação.
 - **ADF** cobre parágrafo, heading, código, listas, citação e marcas inline.
   Tabela e lista aninhada degradam para texto.
-- **Execução é sequencial.** O plano já carrega `dependsOn`, o que permite
-  paralelizar sem mudar o Planner.
 
 ## Desenvolvimento
 

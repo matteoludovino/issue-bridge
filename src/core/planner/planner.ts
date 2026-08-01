@@ -39,7 +39,13 @@ const actionId = {
   comment: (commentRefId: string) => `comment:${commentRefId}`,
   attachment: (attachmentRefId: string) => `attachment:${attachmentRefId}`,
   link: (from: string, type: LinkType, to: string) => `link:${from}|${type}|${to}`,
-  transition: (issueRefId: string) => `transition:${issueRefId}`,
+  /**
+   * O status de destino faz parte do id — e portanto da chave de idempotência.
+   * Sem isso, uma issue que mudou de status na origem depois da primeira
+   * migração teria a transição pulada para sempre no `sync`.
+   */
+  transition: (issueRefId: string, targetStatus: string) =>
+    `transition:${issueRefId}:${targetStatus}`,
 };
 
 /**
@@ -347,7 +353,7 @@ export function buildPlan(
         });
       }
       transitionActions.push({
-        id: actionId.transition(issue.sourceRef.id),
+        id: actionId.transition(issue.sourceRef.id, targetStatus),
         kind: 'transition_issue',
         dependsOn: [issueAction.id],
         sourceRef: issue.sourceRef,

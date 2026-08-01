@@ -12,6 +12,7 @@ import type { AttachmentFetcher } from './core/ports/attachment-fetcher.js';
 import type { ExtractOptions } from './core/ports/source-adapter.js';
 import type { MappingConfig } from './core/planner/mapping-config.js';
 import { JsonRollbackStore } from './storage/json-rollback-store.js';
+import { SyncStateStore } from './storage/sync-state.js';
 
 /**
  * Raiz de composição: o único lugar que conhece config E adapters concretos ao
@@ -74,11 +75,22 @@ export function toMappingConfig(config: MigrationConfig): MappingConfig {
   return config.mappings;
 }
 
-export function toExtractOptions(config: MigrationConfig): ExtractOptions {
+/**
+ * `updatedSince` recebe o maior entre o piso da config e a marca d'água do
+ * `sync` — assim um recorte histórico configurado nunca é desfeito por uma marca
+ * mais antiga, e a marca nunca é ignorada quando é mais recente.
+ */
+export function toExtractOptions(
+  config: MigrationConfig,
+  updatedSince?: string,
+): ExtractOptions {
   const { extract, source } = config;
+  const since = latestTimestamp(extract.updatedSince, updatedSince);
+
   return {
     identifier: source.identifier,
     includeClosed: extract.includeClosed,
+    ...(since === undefined ? {} : { updatedSince: since }),
     ...(extract.labelFilter.length === 0 ? {} : { labelFilter: extract.labelFilter }),
     ...(extract.maxItems === undefined ? {} : { maxItems: extract.maxItems }),
   };
@@ -86,6 +98,18 @@ export function toExtractOptions(config: MigrationConfig): ExtractOptions {
 
 export function toRetryPolicy(config: MigrationConfig): RetryPolicy {
   return config.execution.retry;
+}
+
+export function createSyncStateStore(loaded: LoadedConfig): SyncStateStore {
+  return new SyncStateStore(loaded.config.execution.syncStatePath);
+}
+
+function latestTimestamp(...candidates: (string | undefined)[]): string | undefined {
+  const valid = candidates.filter((value): value is string => value !== undefined);
+  if (valid.length === 0) return undefined;
+  return valid.reduce((latest, current) =>
+    Date.parse(current) > Date.parse(latest) ? current : latest,
+  );
 }
 
 function resolveClassification(config: MigrationConfig): LabelClassification {

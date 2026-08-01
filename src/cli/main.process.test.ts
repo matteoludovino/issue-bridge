@@ -216,6 +216,34 @@ describe('CLI — migração completa contra servidor local', () => {
       json({ login: 'ana', id: 10 });
       return;
     }
+    // ── API da origem (GitHub), usada pelo `sync`
+    if (url.startsWith('/repos/acme/api/labels')) {
+      json([]);
+      return;
+    }
+    if (url.startsWith('/repos/acme/api/milestones')) {
+      json([]);
+      return;
+    }
+    if (url.startsWith('/repos/acme/api/issues')) {
+      json([
+        {
+          number: 5,
+          title: 'Issue que só existe no incremento',
+          body: 'corpo',
+          state: 'open',
+          labels: [],
+          user: { login: 'ana', id: 10, html_url: `${baseUrl}/ana` },
+          assignees: [],
+          created_at: '2026-03-02T00:00:00Z',
+          updated_at: '2026-03-02T00:00:00Z',
+          html_url: `${baseUrl}/acme/api/issues/5`,
+          comments: 0,
+        },
+      ]);
+      return;
+    }
+
     if (url.includes('/rest/api/3/myself')) {
       json({ accountId: 'acc-bot', displayName: 'Bot' });
       return;
@@ -354,15 +382,33 @@ describe('CLI — migração completa contra servidor local', () => {
     const posted = requests
       .filter((entry) => entry.method === 'POST')
       .map((entry) => entry.url.replace('/rest/api/3', ''));
-    expect(posted).toEqual([
-      '/issue',
-      '/issue',
-      '/issue',
-      '/issue/20002/comment',
-      '/issue/20003/attachments',
-      '/issueLink',
-      '/issue/20003/transitions',
-    ]);
+
+    // A config usa concurrency > 1, então a ordem entre ações independentes não
+    // é determinística — o conjunto e as dependências são.
+    expect([...posted].sort()).toEqual(
+      [
+        '/issue',
+        '/issue',
+        '/issue',
+        '/issue/20002/comment',
+        '/issue/20003/attachments',
+        '/issueLink',
+        '/issue/20003/transitions',
+      ].sort(),
+    );
+
+    // A primeira escrita é sempre o épico: tudo o mais depende de algo.
+    expect(posted[0]).toBe('/issue');
+
+    // Invariante que vale com qualquer concorrência: comentário, anexo, link e
+    // transição dependem de uma issue, que por sua vez depende do épico — então
+    // nunca podem aparecer antes de duas criações de issue. A ordem estrita
+    // entre ações independentes é coberta nos testes de unidade do Executor.
+    posted.forEach((path, index) => {
+      if (path === '/issue') return;
+      const issuesBefore = posted.slice(0, index).filter((earlier) => earlier === '/issue').length;
+      expect(issuesBefore).toBeGreaterThanOrEqual(2);
+    });
 
     const report = await readFile(join(workdir, '.issue-bridge', 'migration-report.md'), 'utf8');
     expect(report).toContain('# Relatório de migração — execução');
@@ -391,7 +437,63 @@ describe('CLI — migração completa contra servidor local', () => {
     expect(execution.skipped).toHaveLength(plan.actions.length);
     expect(execution.succeeded).toHaveLength(0);
   }, 60_000);
+
+  syncTests({ workdir: () => workdir, requests: () => requests });
 });
+
+/** Roda depois do teste acima de propósito: reaproveita o ledger já povoado. */
+function syncTests(context: {
+  workdir: () => string;
+  requests: () => { method: string; url: string }[];
+}): void {
+  it('sync migra só o incremento e avança a marca d’água', async () => {
+    const workdir = context.workdir();
+    const env = { ...CREDENTIALS };
+    const posts = (): number => context.requests().filter((entry) => entry.method === 'POST').length;
+    const issueQueries = (): string[] =>
+      context
+        .requests()
+        .filter((entry) => entry.url.startsWith('/repos/acme/api/issues'))
+        .map((entry) => entry.url);
+
+    // ── primeiro sync: sem marca d'água, cria a issue nova
+    const before = posts();
+    const first = await runCli(['sync', '-c', 'config.yaml', '--yes'], { cwd: workdir, env });
+
+    expect(first.code).toBe(0);
+    expect(posts() - before).toBe(1);
+    expect(issueQueries()[0]).not.toContain('since=');
+
+    const state: { identifier: string; lastSyncedAt: string } = JSON.parse(
+      await readFile(join(workdir, '.issue-bridge', 'sync-state.json'), 'utf8'),
+    );
+    expect(state.identifier).toBe('acme/api');
+    expect(Date.parse(state.lastSyncedAt)).not.toBeNaN();
+
+    // ── segundo sync: usa a marca e não reescreve nada
+    const afterFirst = posts();
+    const second = await runCli(['sync', '-c', 'config.yaml', '--yes'], { cwd: workdir, env });
+
+    expect(second.code).toBe(0);
+    expect(issueQueries().at(-1)).toContain('since=');
+    expect(posts()).toBe(afterFirst);
+  }, 60_000);
+
+  it('sync em simulação não avança a marca d’água', async () => {
+    const workdir = context.workdir();
+    const statePath = join(workdir, '.issue-bridge', 'sync-state.json');
+    const before = await readFile(statePath, 'utf8');
+
+    const result = await runCli(['sync', '-c', 'config.yaml', '--full'], {
+      cwd: workdir,
+      env: CREDENTIALS,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain('SIMULAÇÃO');
+    expect(await readFile(statePath, 'utf8')).toBe(before);
+  }, 60_000);
+}
 
 function collectBody(request: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {

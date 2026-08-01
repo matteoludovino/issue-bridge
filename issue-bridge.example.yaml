@@ -79,8 +79,19 @@ extract:
   labelFilter: []               # vazio = todas as issues
   # maxItems: 500               # teto de itens lidos da API (issues + PRs)
 
+  # Piso fixo de data de alteração, para recortar histórico longo. O `sync` usa a
+  # própria marca d'água quando ela é mais recente que isto.
+  # updatedSince: 2026-01-01T00:00:00Z
+
 execution:
-  ledgerPath: .issue-bridge/ledger.json   # mapa origem -> destino (idempotência)
+  ledgerPath: .issue-bridge/ledger.json          # mapa origem -> destino (idempotência)
+  syncStatePath: .issue-bridge/sync-state.json   # marca d'água do sync
+
+  # Ações independentes escritas em paralelo (o escalonador respeita dependsOn).
+  # Acima de ~8 o rate limit do destino vira o gargalo. Use 1 para depurar com
+  # ordem determinística.
+  concurrency: 4
+
   retry:
     maxAttempts: 5
     baseDelayMs: 500
