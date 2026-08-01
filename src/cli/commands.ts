@@ -27,19 +27,20 @@ import type { SyncStateStore } from '../storage/sync-state.js';
 import { ProgressLine, color, formatNumber, symbol } from '../utils/ui.js';
 
 /**
- * Comandos da CLI.
+ * CLI commands.
  *
- * Cada função recebe as dependências já construídas e devolve o código de saída
- * — nada aqui sabe que a origem é GitHub ou o destino é Jira, e nada aqui chama
- * `process.exit`. É o que torna os comandos testáveis com adapters falsos.
+ * Each function receives already-constructed dependencies and returns the exit
+ * code — nothing here knows that the source is GitHub or the target is Jira, and
+ * nothing here calls `process.exit`. That is what makes the commands testable
+ * with fake adapters.
  */
 
 export const EXIT = {
-  /** Tudo certo. */
+  /** All good. */
   ok: 0,
-  /** Executou, mas há erro bloqueante no plano ou falha de ação. */
+  /** Ran, but the plan has a blocking error or an action failed. */
   problems: 1,
-  /** Não foi possível executar: config, credencial ou artefato inválido. */
+  /** Could not run: invalid config, credentials or artifact. */
   aborted: 2,
 } as const;
 
@@ -51,10 +52,10 @@ export interface CommandDeps {
   logger: Logger;
   clock: Clock;
   attachments?: AttachmentFetcher;
-  /** Marca d'água do `sync`. Ausente, `sync` roda sempre completo. */
+  /** Sync watermark. When absent, `sync` always runs a full pass. */
   syncState?: SyncStateStore;
   sleeper?: Sleeper;
-  /** Saída de DADOS (stdout). Log humano vai para stderr, via `logger`. */
+  /** DATA output (stdout). Human logging goes to stderr, through `logger`. */
   write?: (text: string) => void;
 }
 
@@ -62,18 +63,18 @@ export interface ArtifactOptions {
   outDir: string;
 }
 
-/** Valida as duas credenciais antes de qualquer trabalho pesado. */
+/** Validates both credentials before doing any heavy work. */
 export async function runLogin(deps: CommandDeps): Promise<number> {
   await deps.source.authenticate();
-  deps.logger.info(`${symbol.ok} Credencial da origem (${deps.source.platformName}) válida.`);
+  deps.logger.info(`${symbol.ok} Source credentials are valid (${deps.source.platformName}).`);
 
   await deps.target.authenticate();
-  deps.logger.info(`${symbol.ok} Credencial do destino (${deps.target.platformName}) válida.`);
+  deps.logger.info(`${symbol.ok} Target credentials are valid (${deps.target.platformName}).`);
 
   return EXIT.ok;
 }
 
-/** Extrai a origem para um snapshot em disco, sem tocar no destino. */
+/** Extracts the source into a snapshot on disk, without touching the target. */
 export async function runExport(
   deps: CommandDeps,
   options: ArtifactOptions & { out?: string },
@@ -83,15 +84,15 @@ export async function runExport(
 
   await writeJson(target, model);
   deps.logger.info(
-    `${symbol.ok} Snapshot gravado em ${target}: ${formatNumber(model.issues.length)} issue(s), ` +
-      `${formatNumber(countComments(model))} comentário(s), ${formatNumber(countAttachments(model))} anexo(s).`,
+    `${symbol.ok} Snapshot written to ${target}: ${formatNumber(model.issues.length)} issue(s), ` +
+      `${formatNumber(countComments(model))} comment(s), ${formatNumber(countAttachments(model))} attachment(s).`,
   );
   return EXIT.ok;
 }
 
 /**
- * Constrói e grava o plano sem escrever no destino. Código de saída 1 quando há
- * erro bloqueante — o que permite usar `analyze` como gate em CI.
+ * Builds and writes the plan without writing to the target. Exit code 1 when
+ * there is a blocking error, which makes `analyze` usable as a CI gate.
  */
 export async function runAnalyze(
   deps: CommandDeps,
@@ -107,12 +108,12 @@ export async function runAnalyze(
 }
 
 export interface ApplyOptions extends ArtifactOptions {
-  /** Plano já gerado pelo `analyze`; ausente, é construído agora. */
+  /** Plan already produced by `analyze`; when absent, it is built now. */
   plan?: string;
   dryRun?: boolean;
-  /** Sem isso, `apply` roda em simulação — escrever no destino é irreversível. */
+  /** Without this, `apply` simulates — writing to the target is irreversible. */
   yes?: boolean;
-  /** Linha de progresso no stderr. Só a CLI liga; por padrão fica silencioso. */
+  /** Progress line on stderr. Only the CLI turns it on; quiet by default. */
   progress?: boolean;
 }
 
@@ -126,42 +127,42 @@ export async function runApply(deps: CommandDeps, options: ApplyOptions): Promis
 }
 
 export interface SyncOptions extends ApplyOptions {
-  /** Sobrescreve a marca d'água (ISO 8601). */
+  /** Overrides the watermark (ISO 8601). */
   since?: string;
-  /** Ignora a marca d'água e relê a origem inteira. */
+  /** Ignores the watermark and re-reads the whole source. */
   full?: boolean;
 }
 
 /**
- * Migração incremental: lê da origem apenas o que mudou desde o último `sync`
- * bem-sucedido, aplica, e só então avança a marca d'água.
+ * Incremental migration: reads from the source only what changed since the last
+ * successful `sync`, applies it, and only then advances the watermark.
  *
- * A marca gravada é o instante de INÍCIO da extração. Se um item for alterado
- * durante a execução, ele cai na próxima janela em vez de ser perdido — o custo
- * é reprocessar alguns itens, que a idempotência do ledger absorve.
+ * The stored watermark is the moment the extraction STARTED. An item changed
+ * during the run falls into the next window instead of being lost — the cost is
+ * reprocessing a few items, which the ledger's idempotency absorbs.
  *
- * Limite conhecido: `sync` traz itens NOVOS (issues, comentários, transições de
- * status). Alteração de título ou corpo de item já migrado não é propagada — o
- * plano não tem ação de atualização.
+ * Known limit: `sync` brings NEW items (issues, comments, status transitions). A
+ * change to the title or body of an already-migrated item is not propagated —
+ * the plan has no update action.
  */
 export async function runSync(deps: CommandDeps, options: SyncOptions): Promise<number> {
   const identifier = deps.config.source.identifier;
   const state = options.full === true ? null : ((await deps.syncState?.read(identifier)) ?? null);
   const since = options.since ?? state?.lastSyncedAt;
 
-  // Capturado ANTES da extração, de propósito.
+  // Captured BEFORE the extraction, on purpose.
   const startedAt = deps.clock.now();
 
   deps.logger.info(
     since === undefined
-      ? `Sync completo de ${identifier} (sem marca d'água anterior).`
-      : `Sync incremental de ${identifier}: alterações desde ${since}.`,
+      ? `Full sync of ${identifier} (no previous watermark).`
+      : `Incremental sync of ${identifier}: changes since ${since}.`,
   );
 
   const plan = await preparePlan(deps, { ...options, ...(since === undefined ? {} : { since }) });
 
   if (plan.actions.length === 0) {
-    deps.logger.info(`${symbol.ok} Nada novo na origem.`);
+    deps.logger.info(`${symbol.ok} Nothing new in the source.`);
     await advanceWatermark(deps, identifier, startedAt, options);
     return EXIT.ok;
   }
@@ -172,8 +173,8 @@ export async function runSync(deps: CommandDeps, options: SyncOptions): Promise<
 }
 
 /**
- * A marca só avança quando a execução foi real e completa: em simulação ou com
- * falha, avançar esconderia itens que nunca chegaram ao destino.
+ * The watermark only advances after a real, complete run: advancing after a
+ * simulation or a failure would hide items that never reached the target.
  */
 async function advanceWatermark(
   deps: CommandDeps,
@@ -182,13 +183,13 @@ async function advanceWatermark(
   options: SyncOptions,
 ): Promise<void> {
   if (options.dryRun === true || options.yes !== true) {
-    deps.logger.info('Marca d’água NÃO avançou: execução foi simulação.');
+    deps.logger.info('Watermark NOT advanced: this was a simulation.');
     return;
   }
   if (deps.syncState === undefined) return;
 
   await deps.syncState.write({ version: 1, identifier, lastSyncedAt });
-  deps.logger.info(`Marca d’água avançada para ${lastSyncedAt}.`);
+  deps.logger.info(`Watermark advanced to ${lastSyncedAt}.`);
 }
 
 async function applyPlan(
@@ -197,13 +198,13 @@ async function applyPlan(
   options: ApplyOptions,
 ): Promise<number> {
   if (hasBlockingErrors(plan)) {
-    // Mensagem própria em vez de deixar o MigrationBlockedError vazar: o
-    // operador precisa saber ONDE ver o detalhe.
+    // A dedicated message instead of letting MigrationBlockedError surface: the
+    // operator needs to know WHERE to read the details.
     await writeText(artifactPath(options.outDir, 'report'), renderPlanReport(plan));
     deps.logger.error(
-      `${symbol.error} Plano bloqueado por ${String(
+      `${symbol.error} Plan blocked by ${String(
         plan.findings.filter((finding) => finding.severity === 'error').length,
-      )} erro(s). Detalhes em ${artifactPath(options.outDir, 'report')}.`,
+      )} error(s). Details in ${artifactPath(options.outDir, 'report')}.`,
     );
     return EXIT.problems;
   }
@@ -211,7 +212,7 @@ async function applyPlan(
   const dryRun = options.dryRun === true || options.yes !== true;
   if (dryRun && options.dryRun !== true) {
     deps.logger.warn(
-      'Rodando em SIMULAÇÃO porque --yes não foi informado; nada será escrito no destino.',
+      'Running as a SIMULATION because --yes was not provided; nothing will be written to the target.',
     );
   }
 
@@ -224,7 +225,7 @@ async function applyPlan(
   );
 
   const progress =
-    options.progress === true ? new ProgressLine(dryRun ? 'Simulando' : 'Aplicando') : null;
+    options.progress === true ? new ProgressLine(dryRun ? 'Simulating' : 'Applying') : null;
 
   let result: ExecutionResult;
   try {
@@ -257,7 +258,7 @@ async function applyPlan(
   return result.failed.length > 0 ? EXIT.problems : EXIT.ok;
 }
 
-/** Regera o relatório a partir dos artefatos, sem rede. */
+/** Re-renders the report from the artifacts on disk, with no network access. */
 export async function runReport(
   deps: CommandDeps,
   options: ArtifactOptions & { plan?: string; execution?: string; out?: string },
@@ -272,18 +273,18 @@ export async function runReport(
 
   await writeText(target, content);
   deps.logger.info(
-    `${symbol.ok} Relatório ${execution === null ? 'do plano' : 'da execução'} gravado em ${target}.`,
+    `${symbol.ok} ${execution === null ? 'Plan' : 'Execution'} report written to ${target}.`,
   );
   return EXIT.ok;
 }
 
 /**
- * Lista o mapa origem → destino.
+ * Lists the source → target map.
  *
- * Chama-se `ledger`, e não `rollback`, porque o Jira não desfaz criação de issue
- * de forma limpa: o valor real deste registro é idempotência e reconciliação,
- * não desfazer. Assumir "rollback" levaria o operador a esperar algo que a API
- * do destino não entrega.
+ * It is called `ledger` and not `rollback` because Jira cannot cleanly undo
+ * issue creation: the real value of this record is idempotency and
+ * reconciliation, not undoing. Calling it "rollback" would lead the operator to
+ * expect something the target API does not deliver.
  */
 export async function runLedger(deps: CommandDeps, options: { json?: boolean }): Promise<number> {
   const entries = await deps.store.list();
@@ -295,15 +296,15 @@ export async function runLedger(deps: CommandDeps, options: { json?: boolean }):
   }
 
   if (entries.length === 0) {
-    // Vai para o stdout: silêncio com código 0 seria ambíguo para quem consulta.
-    write('(ledger vazio: nada foi migrado ainda)\n');
+    // Goes to stdout: silence plus exit 0 would be ambiguous for a query.
+    write('(ledger is empty: nothing has been migrated yet)\n');
     return EXIT.ok;
   }
 
   for (const entry of entries) {
     write(`${entry.sourceId} ${color.dim(symbol.arrow)} ${entry.targetRef.humanRef}\n`);
   }
-  deps.logger.info(`${formatNumber(entries.length)} correspondência(s) no ledger.`);
+  deps.logger.info(`${formatNumber(entries.length)} mapping(s) in the ledger.`);
   return EXIT.ok;
 }
 
@@ -317,7 +318,7 @@ async function preparePlan(
       : await readSnapshot(options.snapshot);
 
   const projectKey = deps.config.target.projectKey;
-  deps.logger.info(`Descobrindo capacidades do destino (${projectKey})…`);
+  deps.logger.info(`Discovering target capabilities (${projectKey})…`);
   const capabilities = await deps.target.discoverCapabilities(projectKey);
 
   return buildPlan(model, capabilities, toMappingConfig(deps.config), projectKey, {
@@ -327,9 +328,9 @@ async function preparePlan(
 
 async function extractModel(deps: CommandDeps, since?: string): Promise<IssueModel> {
   const options = toExtractOptions(deps.config, since);
-  deps.logger.info(`Extraindo ${options.identifier} de ${deps.source.platformName}…`);
+  deps.logger.info(`Extracting ${options.identifier} from ${deps.source.platformName}…`);
   const model = await deps.source.extract(options);
-  deps.logger.info(`Extraídas ${formatNumber(model.issues.length)} issue(s).`);
+  deps.logger.info(`Extracted ${formatNumber(model.issues.length)} issue(s).`);
   return model;
 }
 
@@ -338,30 +339,30 @@ function summarizePlan(deps: CommandDeps, plan: MigrationPlan, outDir: string): 
   const warnings = plan.findings.filter((finding) => finding.severity === 'warning').length;
 
   deps.logger.info(
-    `Plano: ${formatNumber(plan.actions.length)} ação(ões) para o projeto ${plan.targetProjectKey}.`,
+    `Plan: ${formatNumber(plan.actions.length)} action(s) for project ${plan.targetProjectKey}.`,
   );
 
   if (errors > 0) {
     deps.logger.error(
-      `${symbol.error} ${String(errors)} erro(s) bloqueiam o apply. Veja ${artifactPath(outDir, 'report')}.`,
+      `${symbol.error} ${String(errors)} error(s) block apply. See ${artifactPath(outDir, 'report')}.`,
     );
   } else {
-    deps.logger.info(`${symbol.ok} Nenhum erro bloqueante.`);
+    deps.logger.info(`${symbol.ok} No blocking errors.`);
   }
-  if (warnings > 0) deps.logger.warn(`${String(warnings)} aviso(s) no plano.`);
+  if (warnings > 0) deps.logger.warn(`${String(warnings)} warning(s) in the plan.`);
 }
 
 function summarizeExecution(deps: CommandDeps, result: ExecutionResult, outDir: string): void {
-  const mode = result.dryRun ? 'Simulação' : 'Execução';
+  const mode = result.dryRun ? 'Simulation' : 'Execution';
   deps.logger.info(
-    `${mode} concluída: ${formatNumber(result.succeeded.length)} ok, ` +
-      `${formatNumber(result.skipped.length)} pulada(s), ${formatNumber(result.failed.length)} falha(s).`,
+    `${mode} finished: ${formatNumber(result.succeeded.length)} ok, ` +
+      `${formatNumber(result.skipped.length)} skipped, ${formatNumber(result.failed.length)} failed.`,
   );
 
   if (result.failed.length > 0) {
     deps.logger.error(
-      `${symbol.error} Falhas detalhadas em ${artifactPath(outDir, 'report')}. ` +
-        'Reexecutar é seguro: o ledger pula o que já foi criado.',
+      `${symbol.error} Failure details in ${artifactPath(outDir, 'report')}. ` +
+        'Re-running is safe: the ledger skips whatever already exists.',
     );
   }
 }
@@ -370,7 +371,7 @@ async function tryReadExecution(filePath: string): Promise<ExecutionResult | nul
   try {
     return await readExecution(filePath);
   } catch {
-    // Ausente é normal: `report` depois de `analyze` e antes de `apply`.
+    // Missing is normal: `report` between `analyze` and `apply`.
     return null;
   }
 }

@@ -107,7 +107,7 @@ export class GitHubHttp {
     } catch (cause: unknown) {
       throw new MigrationError({
         code: 'unknown',
-        message: `Resposta não-JSON em ${path}.`,
+        message: `Non-JSON response from ${path}.`,
         cause,
       });
     }
@@ -118,7 +118,7 @@ export class GitHubHttp {
     // Contrato quebrado do GitHub: não é retentável, é bug ou mudança de API.
     throw new MigrationError({
       code: 'validation',
-      message: `Resposta de ${path} não bate com o schema esperado: ${result.error.issues
+      message: `Response from ${path} does not match the expected schema: ${result.error.issues
         .slice(0, 3)
         .map((issue) => `${issue.path.join('.')} ${issue.message}`)
         .join('; ')}`,
@@ -143,14 +143,14 @@ export function toMigrationError(response: HttpResponse, rawUrl: string): Migrat
   if (response.status === 401) {
     return new MigrationError({
       code: 'auth',
-      message: `Credencial do GitHub inválida ou expirada (401 em ${url}).`,
+      message: `GitHub credentials are invalid or expired (401 from ${url}).`,
     });
   }
 
   if (response.status === 429 || (response.status === 403 && retryAfterMs !== undefined)) {
     return new MigrationError({
       code: 'rate-limit',
-      message: `Rate limit do GitHub em ${url}. ${detail}`,
+      message: `GitHub rate limit hit at ${url}. ${detail}`,
       ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     });
   }
@@ -158,30 +158,30 @@ export function toMigrationError(response: HttpResponse, rawUrl: string): Migrat
   if (response.status === 403) {
     return new MigrationError({
       code: 'forbidden',
-      message: `Sem permissão para ${url}. ${detail}`,
+      message: `No permission for ${url}. ${detail}`,
     });
   }
 
   if (response.status === 404) {
-    return new MigrationError({ code: 'not-found', message: `Recurso não encontrado: ${url}.` });
+    return new MigrationError({ code: 'not-found', message: `Resource not found: ${url}.` });
   }
 
   if (response.status === 422) {
     return new MigrationError({
       code: 'validation',
-      message: `Requisição rejeitada pelo GitHub em ${url}. ${detail}`,
+      message: `GitHub rejected the request at ${url}. ${detail}`,
     });
   }
 
   if (response.status >= 500) {
     return new MigrationError({
       code: 'transient',
-      message: `GitHub indisponível (${String(response.status)}) em ${url}.`,
+      message: `GitHub is unavailable (${String(response.status)}) at ${url}.`,
     });
   }
 
   return new MigrationError({
     code: 'unknown',
-    message: `Resposta inesperada ${String(response.status)} em ${url}. ${detail}`,
+    message: `Unexpected response ${String(response.status)} from ${url}. ${detail}`,
   });
 }

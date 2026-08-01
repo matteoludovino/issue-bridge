@@ -1,139 +1,198 @@
 # issue-bridge
 
-Migração de issues entre trackers (hoje GitHub → Jira Cloud) com plano revisável,
-ledger de idempotência e relatório em markdown.
+Migrate issues between trackers — today GitHub → Jira Cloud — with a reviewable
+plan, an idempotency ledger and a markdown report.
 
-Arquitetura hexagonal: o núcleo (`src/core/`) não conhece GitHub nem Jira — só o
-modelo intermediário e as portas. Adicionar GitLab como origem é implementar
-`SourceAdapter`; adicionar Azure DevOps como destino é implementar
-`TargetAdapter`. Nenhuma linha do núcleo muda.
+[![CI](https://github.com/matteoludovino/issue-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/matteoludovino/issue-bridge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Instalação
+A tracker migration is a one-way operation against someone's real backlog, so
+this tool is built around three properties:
+
+- **Nothing is written before you can read what will be written.** `analyze`
+  produces a plan and a report; `apply` refuses to run while the plan has a
+  blocking error, and simulates unless you pass `--yes`.
+- **Re-running is always safe.** Every created item is recorded in a ledger, so
+  a run interrupted halfway resumes instead of duplicating.
+- **Limitations are documented, not discovered.** What the GitHub and Jira APIs
+  cannot do is listed below, before you find out mid-migration.
+
+Runtime dependencies: `zod`, `yaml`, `commander` — none of which have transitive
+dependencies.
+
+> Status: pre-1.0, not yet published to npm. Install from source.
+
+## Install
 
 ```bash
+git clone https://github.com/matteoludovino/issue-bridge.git
+cd issue-bridge
 npm install
 npm run build
+npm link          # optional, puts `issue-bridge` on your PATH
 ```
 
-Requer Node 20+. Dependências de runtime: `zod`, `yaml`, `commander`.
+Node 20 or newer.
 
-## Uso
+## Quick start
 
 ```bash
-cp issue-bridge.example.yaml issue-bridge.yaml   # e edite
+cp issue-bridge.example.yaml issue-bridge.yaml   # then edit it
 
 export GITHUB_TOKEN=ghp_...
 export JIRA_EMAIL=bot@acme.com
 export JIRA_API_TOKEN=...
 
-issue-bridge login      # valida as duas credenciais
-issue-bridge export     # extrai a origem para .issue-bridge/snapshot.json
-issue-bridge analyze    # gera plano + relatório, sem escrever no destino
-issue-bridge apply      # SIMULAÇÃO (sem --yes)
+issue-bridge login      # validate both credentials
+issue-bridge analyze    # build the plan and report, writing nothing
+issue-bridge apply      # SIMULATION (no --yes)
 issue-bridge apply --yes
-issue-bridge sync --yes # migra só o que mudou desde o último sync
-issue-bridge report     # regera o relatório dos artefatos
-issue-bridge ledger     # mapa origem → destino
 ```
 
-Credenciais **nunca** ficam no YAML — só o nome da variável de ambiente. O
-arquivo de configuração é feito para ser versionado.
+Credentials **never** live in the YAML — it only holds the *name* of the
+environment variable to read. The configuration file is meant to be committed.
 
-### Fluxo recomendado
+### Recommended flow
 
-1. `analyze` até sair com código 0. Todo erro bloqueante vem com o código do
-   problema e a chave de configuração que o resolve.
-2. `apply` sem `--yes` para conferir o que seria escrito.
-3. `apply --yes`. Se algo falhar, corrija e rode de novo: o ledger pula tudo que
-   já foi criado.
+1. Run `analyze` until it exits 0. Every blocking error names the problem code
+   and the configuration key that resolves it.
+2. Run `apply` without `--yes` to see exactly what would be written.
+3. Run `apply --yes`. If anything fails, fix it and run again — the ledger skips
+   everything that already exists.
 
-### Códigos de saída
+## Commands
 
-| Código | Significado |
-| --- | --- |
-| 0 | Sucesso |
-| 1 | Executou, mas há erro bloqueante no plano ou falha de ação |
-| 2 | Abortado: config, credencial ou artefato inválido |
+| Command | What it does |
+|---|---|
+| `login` | Validates the source and target credentials |
+| `export` | Extracts the source into a local snapshot, target untouched |
+| `analyze` | Builds the plan and report; exits 1 if the plan has an error |
+| `apply` | Executes the plan; simulates unless `--yes` |
+| `sync` | Migrates only what changed since the last successful sync |
+| `report` | Re-renders the report from artifacts on disk, offline |
+| `ledger` | Lists the source → target map |
 
-`analyze` sair com 1 serve como gate em CI.
+Global flags: `-c/--config`, `-o/--out-dir`, `-v/--verbose`, `-q/--quiet`,
+`--json`. Human logging goes to stderr, data to stdout, so
+`issue-bridge ledger --json | jq` works.
 
-### Artefatos
+### Exit codes
 
-Tudo em `.issue-bridge/` (mude com `-o`):
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Ran, but the plan has a blocking error or an action failed |
+| 2 | Aborted: invalid config, credentials or artifact |
 
-| Arquivo | Conteúdo |
-| --- | --- |
-| `snapshot.json` | Origem extraída, no modelo intermediário |
-| `plan.json` | Plano ordenado de ações + diagnósticos |
-| `execution.json` | Resultado de cada ação, com tentativas gastas |
-| `migration-report.md` | Relatório legível |
-| `ledger.json` | Mapa origem → destino |
-| `sync-state.json` | Marca d'água: até quando a origem já foi lida |
+`analyze` exiting 1 makes it usable as a CI gate.
 
-## Sync incremental
+### Artifacts
 
-`sync` lê da origem apenas o que mudou desde a última execução bem-sucedida
-(`since` na API do GitHub, que filtra por data de alteração), aplica, e só então
-avança a marca d'água.
+Everything lands in `.issue-bridge/` (change it with `-o`):
 
-- A marca gravada é o instante de **início** da extração. Item alterado durante a
-  execução cai na próxima janela em vez de ser perdido — o custo é reprocessar
-  alguns itens, que a idempotência do ledger absorve.
-- **Simulação e falha não avançam a marca.** Avançar ali esconderia itens que
-  nunca chegaram ao destino.
-- `--since <iso>` sobrescreve a marca; `--full` a ignora e relê tudo.
-- Apagar `sync-state.json` força releitura completa **sem** perder as
-  correspondências já criadas — são registros separados de propósito.
+| File | Contents |
+|---|---|
+| `snapshot.json` | The extracted source, in the intermediate model |
+| `plan.json` | Ordered list of actions plus diagnostics |
+| `execution.json` | Per-action outcome, including attempts spent |
+| `migration-report.md` | Human-readable report |
+| `ledger.json` | Source → target map |
+| `sync-state.json` | Watermark: how far the source has been read |
 
-O que `sync` **traz**: issues novas, comentários novos, mudança de status.
-O que `sync` **não traz**: alteração de título, corpo, labels ou responsável de
-item já migrado — o plano não tem ação de atualização, só de criação.
+That directory is gitignored: `snapshot.json` holds the full body of every
+extracted issue, including from private repositories.
 
-## Paralelismo
+## Configuration
 
-`execution.concurrency` (padrão 4) controla quantas ações independentes são
-escritas ao mesmo tempo. O escalonador usa o `dependsOn` do plano: uma ação só
-começa quando todas as dependências concluíram, e se alguma falhou, os
-dependentes são descartados sem gastar tentativa.
+See [`issue-bridge.example.yaml`](issue-bridge.example.yaml) — it is commented and
+validated by a test, so it cannot drift from the schema.
 
-Acima de ~8 o rate limit do destino costuma virar o gargalo (o retry absorve, mas
-fica mais lento). Use `concurrency: 1` para depurar com ordem determinística — os
-resultados no relatório saem sempre na ordem do plano, independente da
-concorrência.
+The YAML is parsed in **strict mode**: an unknown key is an error, not something
+silently ignored. A typo like `milestoneStategy` fails validation instead of
+quietly changing behaviour.
 
-## Por que `ledger` e não `rollback`
+Every mapped value is checked against the target during `analyze`. If
+`mappings.issueTypes.bug` points at a type that does not exist in Jira, you get
+an `unmapped_value` error before anything is written.
 
-O Jira não desfaz criação de issue de forma limpa: não há endpoint que reverta
-uma migração sem deixar rastro, e apagar issues em lote destrói histórico que
-pode já ter sido referenciado. Chamar o comando de `rollback` prometeria algo que
-a API do destino não entrega.
+## Incremental sync
 
-O que este registro realmente faz, em ordem de importância:
+`sync` reads only what changed since the last successful run (using the source's
+`updated_at` filter), applies it, and only then advances the watermark.
 
-1. **idempotência** — reexecutar `apply` não duplica nada;
-2. **reconciliação** — resolve para onde escrever quando algo falhou no meio;
-3. **auditoria** — lista o que foi criado, para uma limpeza manual se necessário.
+- The stored watermark is the moment the extraction **started**. An item changed
+  mid-run falls into the next window instead of being lost — the cost is
+  reprocessing a few items, which idempotency absorbs.
+- **Simulation and failure do not advance the watermark.** Advancing there would
+  hide items that never reached the target.
+- `--since <iso>` overrides the watermark; `--full` ignores it.
+- Deleting `sync-state.json` forces a full re-read **without** losing the
+  mappings already created — they are deliberately separate records.
 
-## Limitações conhecidas
+What `sync` **brings**: new issues, new comments, status changes.
+What `sync` **does not bring**: edits to the title, body, labels or assignee of an
+already-migrated item — the plan has no update action, only create.
 
-São limites reais das APIs envolvidas, não pendências de implementação:
+## Parallelism
 
-- **Anexos** do GitHub não têm endpoint próprio: só existem como URL no markdown
-  do corpo. O que estiver fora do corpo não é descoberto.
-- **Hierarquia** vem de task list (`- [ ] #42`); a API de sub-issues (GraphQL)
-  não é usada.
-- **Transição de status** é de um passo. Workflow que exige passo intermediário
-  falha na ação de transição, com a lista de transições disponíveis no erro.
-- **Workflow do Jira não é introspectável** sem uma issue existente, então o
-  `analyze` não consegue validar alcançabilidade de status com precisão.
-- **Custom field obrigatório** precisa de valor em `mappings.fields`; sem isso o
-  `analyze` bloqueia (de propósito — melhor que falhar no meio da escrita).
-- **`sync` não propaga atualização** de item já migrado (ver acima): não existe
-  ação de atualização no plano, só de criação.
-- **ADF** cobre parágrafo, heading, código, listas, citação e marcas inline.
-  Tabela e lista aninhada degradam para texto.
+`execution.concurrency` (default 4) controls how many independent actions are
+written at once. The scheduler uses the plan's `dependsOn`: an action starts only
+after all of its dependencies have completed, and if one of them failed, the
+dependents are dropped without spending an attempt.
 
-## Desenvolvimento
+Past roughly 8, the target's rate limit tends to become the bottleneck — retry
+absorbs it, but the run gets slower. Use `concurrency: 1` to debug with a
+deterministic order. Report output is always in plan order regardless of
+concurrency.
+
+## Why `ledger` and not `rollback`
+
+Jira cannot cleanly undo issue creation: there is no endpoint that reverts a
+migration without a trace, and bulk-deleting issues destroys history that may
+already have been referenced. Calling the command `rollback` would promise
+something the target API does not deliver.
+
+What the record actually does, in order of importance:
+
+1. **idempotency** — re-running `apply` duplicates nothing;
+2. **reconciliation** — resolves where to write when something failed midway;
+3. **audit** — lists what was created, for a manual cleanup if you need one.
+
+## Known limitations
+
+These are limits of the APIs involved, not missing work:
+
+- **GitHub attachments** have no dedicated endpoint: they exist only as URLs in
+  the markdown body. Anything outside the body is not discovered.
+- **Hierarchy** comes from task lists (`- [ ] #42`); the sub-issues GraphQL API is
+  not used.
+- **Status transitions are single-step.** A workflow that requires an
+  intermediate step fails on the transition action, with the available
+  transitions listed in the error.
+- **Jira's workflow is not introspectable** without an existing issue, so
+  `analyze` cannot precisely validate status reachability.
+- **A required custom field needs a value** under `mappings.fields`; without one,
+  `analyze` blocks — deliberately, since failing there beats failing halfway
+  through writing.
+- **ADF conversion** covers paragraphs, headings, code, lists, quotes and inline
+  marks. Tables and nested lists degrade to text.
+
+## Architecture
+
+Hexagonal, ports and adapters. The core (`src/core/`) knows the intermediate
+model and the interfaces — nothing else. Adding GitLab as a source means
+implementing `SourceAdapter`; adding Azure DevOps as a target means implementing
+`TargetAdapter`. No line of the core changes.
+
+`src/core/` imports exactly one external package: `zod`. That is checkable:
+
+```bash
+grep -rhoE "from '[^.][^']*'" src/core --include='*.ts' | sort -u
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the layer map and where things belong.
+
+## Development
 
 ```bash
 npm run typecheck   # tsc --noEmit (strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes)
@@ -141,6 +200,17 @@ npm test            # vitest
 npm run build
 ```
 
-Nenhum teste toca a rede: origem e destino são exercitados por `HttpClient`
-falso, e o pipeline completo (`src/pipeline.test.ts`) roda contra o adapter Jira
-real com HTTP simulado.
+No test touches the network. Adapters are exercised through a fake `HttpClient`,
+and `src/cli/main.process.test.ts` spawns the real binary against a local HTTP
+server that simulates both GitHub and Jira — including a full
+`analyze → apply → ledger → re-apply` cycle.
+
+## Contributing
+
+Bug reports and pull requests are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md). For a security issue, please follow
+[SECURITY.md](SECURITY.md) instead of opening a public issue.
+
+## License
+
+[MIT](LICENSE) © Matteo Ludovino

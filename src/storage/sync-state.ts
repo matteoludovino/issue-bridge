@@ -39,7 +39,7 @@ export class SyncStateStore {
       if (isNotFound(cause)) return null;
       throw new MigrationError({
         code: 'unknown',
-        message: `Não foi possível ler o estado de sync em ${this.filePath}.`,
+        message: `Could not read the sync state at ${this.filePath}.`,
         cause,
       });
     }
@@ -50,7 +50,7 @@ export class SyncStateStore {
     } catch (cause: unknown) {
       throw new MigrationError({
         code: 'validation',
-        message: `Estado de sync em ${this.filePath} não é JSON válido. Remova o arquivo para forçar uma sincronização completa.`,
+        message: `Sync state at ${this.filePath} is not valid JSON. Remove the file to force a full sync.`,
         cause,
       });
     }
@@ -59,7 +59,7 @@ export class SyncStateStore {
     if (!parsed.success) {
       throw new MigrationError({
         code: 'validation',
-        message: `Estado de sync em ${this.filePath} está inválido. Remova o arquivo para forçar uma sincronização completa.`,
+        message: `Sync state at ${this.filePath} is invalid. Remove the file to force a full sync.`,
       });
     }
 
@@ -75,7 +75,7 @@ export class SyncStateStore {
     } catch (cause: unknown) {
       throw new MigrationError({
         code: 'unknown',
-        message: `Falha ao gravar o estado de sync em ${this.filePath}.`,
+        message: `Failed to write the sync state at ${this.filePath}.`,
         cause,
       });
     }

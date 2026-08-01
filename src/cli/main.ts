@@ -24,11 +24,11 @@ import {
 } from './commands.js';
 
 /**
- * Camada fina: parse de argumentos, construção das dependências e tradução de
- * erro em código de saída. Nenhuma regra de negócio.
+ * Thin layer: argument parsing, dependency construction and translation of an
+ * error into an exit code. No business logic.
  *
- * Códigos de saída: 0 sucesso · 1 há erro no plano ou falha de ação · 2 abortado
- * (config, credencial ou artefato inválido).
+ * Exit codes: 0 success · 1 the plan has an error or an action failed · 2 aborted
+ * (invalid config, credentials or artifact).
  */
 
 interface GlobalOptions {
@@ -64,8 +64,8 @@ const globalsOf = (program: Command): GlobalOptions => program.opts<GlobalOption
 function resolveLevel(globals: GlobalOptions): LogLevel {
   if (globals.quiet === true) return 'error';
   if (globals.verbose === true) return 'info';
-  // Padrão: esconde o log por ação do Executor (que pode ser milhares de linhas)
-  // e deixa o progresso + resumo falarem.
+  // Default: hide the executor's per-action log (which can be thousands of
+  // lines) and let the progress line plus the summary speak.
   return 'warn';
 }
 
@@ -74,13 +74,13 @@ function main(): void {
 
   program
     .name('issue-bridge')
-    .description('Migra issues entre trackers (GitHub → Jira) com plano, ledger e relatório.')
+    .description('Migrate issues between trackers (GitHub → Jira) with a reviewable plan, a ledger and a report.')
     .version('0.1.0')
-    .option('-c, --config <arquivo>', 'arquivo de configuração YAML', 'issue-bridge.yaml')
-    .option('-o, --out-dir <diretório>', 'onde gravar snapshot, plano e relatório', '.issue-bridge')
-    .option('-v, --verbose', 'mostra o log de cada ação')
-    .option('-q, --quiet', 'só erros')
-    .option('--json', 'log em JSON (uma linha por evento)');
+    .option('-c, --config <file>', 'YAML configuration file', 'issue-bridge.yaml')
+    .option('-o, --out-dir <dir>', 'where to write snapshot, plan and report', '.issue-bridge')
+    .option('-v, --verbose', 'log every action')
+    .option('-q, --quiet', 'errors only')
+    .option('--json', 'log as JSON (one line per event)');
 
   const run = (
     handler: (deps: CommandDeps, options: Record<string, unknown>) => Promise<number>,
@@ -100,13 +100,13 @@ function main(): void {
 
   program
     .command('login')
-    .description('valida as credenciais de origem e destino')
+    .description('validate the source and target credentials')
     .action(run(async (deps) => runLogin(deps)));
 
   program
     .command('export')
-    .description('extrai a origem para um snapshot local, sem tocar no destino')
-    .option('--out <arquivo>', 'caminho do snapshot')
+    .description('extract the source into a local snapshot, without touching the target')
+    .option('--out <file>', 'snapshot path')
     .action(
       run(async (deps, options) =>
         runExport(deps, {
@@ -118,8 +118,8 @@ function main(): void {
 
   program
     .command('analyze')
-    .description('gera o plano e o relatório sem escrever no destino (sai 1 se houver erro)')
-    .option('--snapshot <arquivo>', 'usa um snapshot já extraído em vez de chamar a origem')
+    .description('build the plan and report without writing to the target (exits 1 on error)')
+    .option('--snapshot <file>', 'use an already extracted snapshot instead of calling the source')
     .action(
       run(async (deps, options) =>
         runAnalyze(deps, {
@@ -131,15 +131,15 @@ function main(): void {
 
   program
     .command('apply')
-    .description('executa o plano no destino; sem --yes roda em simulação')
-    .option('--plan <arquivo>', 'plano já gerado pelo analyze')
-    .option('--dry-run', 'simula explicitamente')
-    .option('--yes', 'confirma a escrita real no destino')
+    .description('execute the plan against the target; without --yes it simulates')
+    .option('--plan <file>', 'plan already produced by analyze')
+    .option('--dry-run', 'simulate explicitly')
+    .option('--yes', 'confirm real writes to the target')
     .action(
       run(async (deps, options) =>
         runApply(deps, {
           outDir: options['outDir'] as string,
-          // Progresso só faz sentido em saída humana.
+          // A progress line only makes sense in human output.
           progress: globalsOf(program).json !== true && globalsOf(program).quiet !== true,
           ...(typeof options['plan'] === 'string' ? { plan: options['plan'] } : {}),
           ...(options['dryRun'] === true ? { dryRun: true } : {}),
@@ -150,11 +150,11 @@ function main(): void {
 
   program
     .command('sync')
-    .description('migra só o que mudou desde o último sync; sem --yes roda em simulação')
-    .option('--since <iso>', 'sobrescreve a marca d’água (ex.: 2026-03-01T00:00:00Z)')
-    .option('--full', 'ignora a marca d’água e relê a origem inteira')
-    .option('--dry-run', 'simula explicitamente')
-    .option('--yes', 'confirma a escrita real no destino')
+    .description('migrate only what changed since the last sync; without --yes it simulates')
+    .option('--since <iso>', 'override the watermark (e.g. 2026-03-01T00:00:00Z)')
+    .option('--full', 'ignore the watermark and re-read the whole source')
+    .option('--dry-run', 'simulate explicitly')
+    .option('--yes', 'confirm real writes to the target')
     .action(
       run(async (deps, options) =>
         runSync(deps, {
@@ -170,10 +170,10 @@ function main(): void {
 
   program
     .command('report')
-    .description('regera o relatório a partir do plano e do log de execução')
-    .option('--plan <arquivo>', 'plano a usar')
-    .option('--execution <arquivo>', 'log de execução a usar')
-    .option('--out <arquivo>', 'caminho do relatório')
+    .description('re-render the report from the plan and the execution log')
+    .option('--plan <file>', 'plan to use')
+    .option('--execution <file>', 'execution log to use')
+    .option('--out <file>', 'report path')
     .action(
       run(async (deps, options) =>
         runReport(deps, {
@@ -189,12 +189,13 @@ function main(): void {
 
   program
     .command('ledger')
-    .description('lista o mapa origem → destino (idempotência e reconciliação)')
-    .option('--json', 'imprime o ledger em JSON no stdout')
+    .description('list the source → target map (idempotency and reconciliation)')
+    .option('--json', 'print the ledger as JSON on stdout')
     .action(
       run(async (deps, options) =>
-        // O `--json` global e o do comando são o mesmo flag para o commander:
-        // aceitar os dois evita que `ledger --json` caia na saída humana.
+        // The global `--json` and the command's own are the same flag as far as
+        // commander is concerned: accepting both keeps `ledger --json` from
+        // falling through to the human output.
         runLedger(deps, {
           json: options['json'] === true || globalsOf(program).json === true,
         }),
@@ -204,13 +205,13 @@ function main(): void {
   program.parse();
 }
 
-/** Erro esperado vira mensagem acionável; inesperado mostra o stack. */
+/** An expected error becomes an actionable message; anything else shows the stack. */
 function reportFatal(error: unknown, verbose: boolean): number {
   if (isMigrationError(error)) {
     process.stderr.write(`${color.red(symbol.error)} ${error.message}\n`);
     if (error.code === 'rate-limit' && error.retryAfterMs !== undefined) {
       process.stderr.write(
-        `  Tente novamente em ~${String(Math.ceil(error.retryAfterMs / 1000))}s.\n`,
+        `  Try again in ~${String(Math.ceil(error.retryAfterMs / 1000))}s.\n`,
       );
     }
     return error.code === 'validation' || error.code === 'auth' || error.code === 'not-found'
@@ -219,7 +220,7 @@ function reportFatal(error: unknown, verbose: boolean): number {
   }
 
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${color.red(symbol.error)} Erro inesperado: ${message}\n`);
+  process.stderr.write(`${color.red(symbol.error)} Unexpected error: ${message}\n`);
   if (verbose && error instanceof Error && error.stack !== undefined) {
     process.stderr.write(`${color.dim(error.stack)}\n`);
   }

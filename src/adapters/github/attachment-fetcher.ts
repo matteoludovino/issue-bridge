@@ -23,7 +23,7 @@ export class GitHubAttachmentFetcher implements AttachmentFetcher {
     if (bytes.length === 0) {
       throw new MigrationError({
         code: 'not-found',
-        message: `Anexo "${filename}" veio vazio de ${url}; provavelmente foi removido na origem.`,
+        message: `Attachment "${filename}" came back empty; it was most likely deleted in the source.`,
       });
     }
 

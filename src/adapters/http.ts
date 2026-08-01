@@ -49,7 +49,7 @@ export class FetchHttpClient implements HttpClient {
     if (typeof globalFetch !== 'function') {
       throw new MigrationError({
         code: 'unknown',
-        message: 'fetch global indisponível: use Node 18+ ou injete um HttpClient.',
+        message: 'Global fetch is unavailable: use Node 18+ or inject an HttpClient.',
       });
     }
 
@@ -64,7 +64,7 @@ export class FetchHttpClient implements HttpClient {
       // Falha de socket/DNS é transitória por definição — o Executor decide o retry.
       throw new MigrationError({
         code: 'transient',
-        message: `Falha de rede em ${request.url}: ${
+        message: `Network failure for ${redactUrl(request.url)}: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,
         cause,
@@ -110,7 +110,7 @@ export function nextPageUrl(linkHeader: string | undefined): string | undefined 
 export function redactUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    const suffix = parsed.search.length > 0 ? '?[redigido]' : '';
+    const suffix = parsed.search.length > 0 ? '?[redacted]' : '';
     return `${parsed.origin}${parsed.pathname}${suffix}`;
   } catch {
     // URL malformada: devolver o caminho sem query, na força bruta.

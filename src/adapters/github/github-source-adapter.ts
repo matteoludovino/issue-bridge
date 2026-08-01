@@ -134,7 +134,7 @@ function parseIdentifier(identifier: string): string {
   if (parts.length !== 2 || owner === undefined || repo === undefined) {
     throw new MigrationError({
       code: 'validation',
-      message: `Identificador inválido "${identifier}": use o formato "owner/repo".`,
+      message: `Invalid identifier "${identifier}": use the "owner/repo" format.`,
     });
   }
   return `${owner}/${repo}`;

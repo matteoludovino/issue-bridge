@@ -113,7 +113,7 @@ export class MigrationBlockedError extends Error {
   constructor(findings: PlanFinding[]) {
     const blocking = findings.filter((finding) => finding.severity === 'error');
     super(
-      `Plano bloqueado por ${String(blocking.length)} erro(s): ${blocking
+      `Plan blocked by ${String(blocking.length)} error(s): ${blocking
         .map((finding) => `${finding.code} — ${finding.message}`)
         .join('; ')}`,
     );
@@ -201,7 +201,7 @@ export class Executor {
     const concurrency = Math.max(1, opts.concurrency ?? 1);
     const planIndex = new Map(plan.actions.map((action, index) => [action.id, index]));
 
-    this.logger.info('Iniciando execução do plano', {
+    this.logger.info('Starting plan execution', {
       generatedAt: plan.generatedAt,
       actions: plan.actions.length,
       concurrency,
@@ -232,7 +232,7 @@ export class Executor {
     result.failed = inPlanOrder(result.failed);
 
     result.finishedAt = new Date().toISOString();
-    this.logger.info('Execução finalizada', {
+    this.logger.info('Execution finished', {
       succeeded: result.succeeded.length,
       skipped: result.skipped.length,
       failed: result.failed.length,
@@ -269,7 +269,7 @@ export class Executor {
         error: { code: 'validation', message, retryable: false },
         attempts: 1,
       });
-      this.logger.error('Ação não executada', { actionId: action.id, message });
+      this.logger.error('Action not executed', { actionId: action.id, message });
       report();
     };
 
@@ -288,7 +288,7 @@ export class Executor {
         queue.splice(index, 1);
 
         if (readiness === 'blocked') {
-          fail(action, `Dependência de "${action.id}" falhou; a ação foi descartada.`);
+          fail(action, `A dependency of "${action.id}" failed; the action was dropped.`);
           continue;
         }
 
@@ -305,7 +305,7 @@ export class Executor {
         // Nada pronto e nada rodando: só acontece se `dependsOn` aponta para
         // fora do plano. Falhar explicitamente é melhor que travar.
         for (const action of queue) {
-          fail(action, `Ação "${action.id}" depende de algo que não existe no plano.`);
+          fail(action, `Action "${action.id}" depends on something that does not exist in the plan.`);
         }
         break;
       }
@@ -323,7 +323,7 @@ export class Executor {
     if (existing !== null) {
       resolved.set(action.id, existing);
       result.skipped.push({ action, reason: 'skipped_already_migrated', targetRef: existing });
-      this.logger.info('Ação já migrada, pulando', {
+      this.logger.info('Action already migrated, skipping', {
         actionId: action.id,
         targetRef: existing.humanRef,
       });
@@ -355,7 +355,7 @@ export class Executor {
       }
 
       result.succeeded.push({ action, targetRef, attempts });
-      this.logger.info(dryRun ? 'Ação simulada' : 'Ação concluída', {
+      this.logger.info(dryRun ? 'Action simulated' : 'Action completed', {
         actionId: action.id,
         kind: action.kind,
         attempts,
@@ -365,7 +365,7 @@ export class Executor {
     } catch (error: unknown) {
       const normalized = normalizeError(error);
       result.failed.push({ action, error: normalized, attempts: Math.max(attempts, 1) });
-      this.logger.error('Ação falhou', {
+      this.logger.error('Action failed', {
         actionId: action.id,
         kind: action.kind,
         attempts: Math.max(attempts, 1),
@@ -405,7 +405,7 @@ export class Executor {
           attempts,
           isMigrationError(error) ? error.retryAfterMs : undefined,
         );
-        this.logger.warn('Falha retentável; aguardando antes de repetir', {
+        this.logger.warn('Retryable failure; waiting before the next attempt', {
           actionId: action.id,
           attempt: attempts,
           delayMs,
@@ -434,7 +434,7 @@ export class Executor {
       if (referenced === undefined) {
         throw new MigrationError({
           code: 'validation',
-          message: `Ação "${action.id}" referencia "${actionRefId}", que não existe no plano.`,
+          message: `Action "${action.id}" references "${actionRefId}", which does not exist in the plan.`,
         });
       }
 
@@ -442,7 +442,7 @@ export class Executor {
       if (stored === null) {
         throw new MigrationError({
           code: 'validation',
-          message: `Dependência "${actionRefId}" de "${action.id}" não foi criada (falhou ou foi pulada).`,
+          message: `Dependency "${actionRefId}" of "${action.id}" was never created (it failed or was skipped).`,
         });
       }
       resolved.set(actionRefId, stored);
@@ -544,7 +544,7 @@ export class Executor {
         if (this.attachments === undefined) {
           throw new MigrationError({
             code: 'validation',
-            message: `Ação "${action.id}" exige um AttachmentFetcher, e o Executor foi construído sem um.`,
+            message: `Action "${action.id}" requires an AttachmentFetcher, and the executor was built without one.`,
           });
         }
         // O download acontece AQUI, não no adapter de destino: só a origem tem a
@@ -608,7 +608,7 @@ function requireRef(ref: TargetItemRef | undefined, action: PlanAction): TargetI
   if (ref !== undefined) return ref;
   throw new MigrationError({
     code: 'validation',
-    message: `Ação "${action.id}" não teve suas dependências resolvidas.`,
+    message: `Dependencies for action "${action.id}" were not resolved.`,
   });
 }
 

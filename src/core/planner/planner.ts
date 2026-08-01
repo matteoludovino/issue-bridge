@@ -105,7 +105,7 @@ export function buildPlan(
         findings.push({
           severity: 'error',
           code: 'unmapped_value',
-          message: `Estratégia de milestone é "epic", mas o tipo "${epicIssueType}" não existe no destino.`,
+          message: `Milestone strategy is "epic", but issue type "${epicIssueType}" does not exist in the target.`,
           relatedSourceRef: milestone.sourceRef,
         });
       } else {
@@ -135,7 +135,7 @@ export function buildPlan(
       findings.push({
         severity: 'info',
         code: 'already_exists',
-        message: `Versão "${milestone.title}" já existe no destino; o adapter deve reconciliar em vez de recriar.`,
+        message: `Version "${milestone.title}" already exists in the target; the adapter should reconcile instead of recreating it.`,
         relatedSourceRef: milestone.sourceRef,
       });
     }
@@ -177,7 +177,7 @@ export function buildPlan(
       findings.push({
         severity: 'error',
         code: 'dependency_cycle',
-        message: `Ciclo de hierarquia entre [${component.join(', ')}]. A issue foi removida do plano; as demais seguem normalmente.`,
+        message: `Hierarchy cycle between [${component.join(', ')}]. This issue was dropped from the plan; the others are unaffected.`,
         relatedSourceRef: issue.sourceRef,
       });
     }
@@ -199,7 +199,7 @@ export function buildPlan(
     findings.push({
       severity: 'warning',
       code: 'dependency_cycle',
-      message: `Ciclo de bloqueio entre [${component.join(', ')}]. Os links serão criados, mas revise a dependência na origem.`,
+      message: `Blocking cycle between [${component.join(', ')}]. The links will still be created, but review the dependency in the source.`,
     });
   }
 
@@ -212,7 +212,7 @@ export function buildPlan(
     findings.push({
       severity: 'error',
       code: 'unmapped_value',
-      message: `Tipo "${issue.type}" mapeado para "${targetType}", que não existe no destino. A issue foi removida do plano.`,
+      message: `Type "${issue.type}" maps to "${targetType}", which does not exist in the target. The issue was dropped from the plan.`,
       relatedSourceRef: issue.sourceRef,
     });
   }
@@ -250,7 +250,7 @@ export function buildPlan(
       findings.push({
         severity: 'info',
         code: 'hierarchy_conflict',
-        message: `Issue tem pai direto e milestone mapeado como épico; o épico foi descartado porque o destino só aceita um pai.`,
+        message: `Issue has both a direct parent and a milestone mapped to an epic; the epic was dropped because the target accepts a single parent.`,
         relatedSourceRef: issue.sourceRef,
       });
       epicActionId = undefined;
@@ -280,7 +280,7 @@ export function buildPlan(
       findings.push({
         severity: 'info',
         code: 'not_migrated',
-        message: `Issue tem ${String(issue.checklist.length)} item(ns) de checklist; o checklist permanece apenas no corpo migrado.`,
+        message: `Issue has ${String(issue.checklist.length)} checklist item(s); the checklist survives only inside the migrated body.`,
         relatedSourceRef: issue.sourceRef,
       });
     }
@@ -340,7 +340,7 @@ export function buildPlan(
       findings.push({
         severity: 'error',
         code: 'unmapped_value',
-        message: `Status "${issue.status}" mapeado para "${targetStatus}", que não existe no workflow do destino.`,
+        message: `Status "${issue.status}" maps to "${targetStatus}", which does not exist in the target workflow.`,
         relatedSourceRef: issue.sourceRef,
       });
     } else if (initialStatus !== undefined && targetStatus !== initialStatus) {
@@ -348,7 +348,7 @@ export function buildPlan(
         findings.push({
           severity: 'warning',
           code: 'unreachable_status',
-          message: `Status "${targetStatus}" não é alcançável a partir de "${initialStatus}" pelas transições declaradas; a transição será tentada de todo modo.`,
+          message: `Status "${targetStatus}" is not reachable from "${initialStatus}" through the declared transitions; the transition will be attempted anyway.`,
           relatedSourceRef: issue.sourceRef,
         });
       }
@@ -429,7 +429,7 @@ function checkRequiredFields(input: {
     input.findings.push({
       severity: 'error',
       code: 'missing_required_field',
-      message: `Destino exige o campo "${fieldId}" para o tipo "${input.targetIssueType}" e não há valor mapeado. Configure em mappings.fields.`,
+      message: `Target requires field "${fieldId}" for type "${input.targetIssueType}" and no value is mapped. Set one under mappings.fields.`,
       relatedSourceRef: input.sourceRef,
     });
   }
@@ -457,7 +457,7 @@ function validateConfiguredFields(
     findings.push({
       severity: 'warning',
       code: 'unmapped_value',
-      message: `Campo "${fieldId}" está configurado em mappings.fields mas não existe no destino; será enviado e provavelmente rejeitado.`,
+      message: `Field "${fieldId}" is configured under mappings.fields but does not exist in the target; it will be sent and most likely rejected.`,
     });
   }
 }
@@ -474,7 +474,7 @@ function resolvePriority(
     findings.push({
       severity: 'warning',
       code: 'used_default_mapping',
-      message: `Issue sem prioridade na origem; aplicando o default "${config.defaultPriority}".`,
+      message: `Issue has no priority in the source; applying the default "${config.defaultPriority}".`,
       relatedSourceRef: issue.sourceRef,
     });
   }
@@ -487,7 +487,7 @@ function resolvePriority(
   findings.push({
     severity: 'error',
     code: 'unmapped_value',
-    message: `Prioridade "${neutral}" mapeada para "${mapped}", que não existe no destino.`,
+    message: `Priority "${neutral}" maps to "${mapped}", which does not exist in the target.`,
     relatedSourceRef: issue.sourceRef,
   });
   return undefined;

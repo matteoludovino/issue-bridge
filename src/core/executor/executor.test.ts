@@ -217,7 +217,7 @@ describe('Executor', () => {
     // O dependente é bloqueado pelo escalonador, antes de qualquer chamada.
     expect(
       result.failed.find((failure) => failure.action.kind === 'create_comment')?.error.message,
-    ).toContain('Dependência de');
+    ).toContain('A dependency of');
     expect(logger.errors).toHaveLength(2);
   });
 
