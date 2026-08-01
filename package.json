@@ -1,8 +1,26 @@
 {
   "name": "issue-bridge",
   "version": "0.1.0",
-  "private": true,
-  "description": "Plataforma de migração de issues entre trackers (hexagonal, ports & adapters)",
+  "description": "Migrate issues between trackers (GitHub → Jira) with a reviewable plan, an idempotency ledger and a markdown report",
+  "keywords": [
+    "issue-migration",
+    "github",
+    "jira",
+    "jira-cloud",
+    "migration",
+    "cli",
+    "hexagonal-architecture"
+  ],
+  "license": "MIT",
+  "author": "Matteo Ludovino",
+  "homepage": "https://github.com/matteoludovino/issue-bridge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matteoludovino/issue-bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/matteoludovino/issue-bridge/issues"
+  },
   "type": "module",
   "bin": {
     "issue-bridge": "./dist/cli/main.js"
@@ -16,7 +34,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "commander": "^15.0.0",
