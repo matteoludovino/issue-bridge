@@ -103,7 +103,7 @@ describe('comandos da CLI', () => {
     expect(plan).toMatchObject({ schemaVersion: 1, targetProjectKey: 'ENG' });
 
     const report = await readFile(join(outDir, 'migration-report.md'), 'utf8');
-    expect(report).toContain('Plano válido');
+    expect(report).toContain('Plan is valid');
     // Nada foi escrito no destino, só descoberta de capacidades.
     expect(target.calls).toEqual(['discoverCapabilities:ENG']);
   });
@@ -126,9 +126,9 @@ describe('comandos da CLI', () => {
 
     expect(code).toBe(EXIT.problems);
     const report = await readFile(join(outDir, 'migration-report.md'), 'utf8');
-    expect(report).toContain('**Plano bloqueado:**');
+    expect(report).toContain('**Plan blocked:**');
     expect(report).toContain('`unmapped_value`');
-    expect(logger.errors.join(' ')).toContain('bloqueiam o apply');
+    expect(logger.errors.join(' ')).toContain('block apply');
   });
 
   it('analyze reaproveita snapshot em disco sem chamar a origem', async () => {
@@ -147,13 +147,13 @@ describe('comandos da CLI', () => {
     const code = await runApply(deps, { outDir });
 
     expect(code).toBe(EXIT.ok);
-    expect(logger.warns.join(' ')).toContain('SIMULAÇÃO');
+    expect(logger.warns.join(' ')).toContain('SIMULATION');
     // Nenhuma escrita além da descoberta de capacidades.
     expect(target.calls).toEqual(['discoverCapabilities:ENG']);
 
     const execution: unknown = JSON.parse(await readFile(join(outDir, 'execution.json'), 'utf8'));
     expect(execution).toMatchObject({ dryRun: true });
-    expect(await readFile(join(outDir, 'migration-report.md'), 'utf8')).toContain('simulação');
+    expect(await readFile(join(outDir, 'migration-report.md'), 'utf8')).toContain('simulation');
   });
 
   it('apply com --yes escreve no destino e grava o relatório da execução', async () => {
@@ -164,8 +164,8 @@ describe('comandos da CLI', () => {
     expect(target.calls.some((call) => call.startsWith('createEpic'))).toBe(true);
 
     const report = await readFile(join(outDir, 'migration-report.md'), 'utf8');
-    expect(report).toContain('# Relatório de migração — execução');
-    expect(report).toContain('## Correspondência origem → destino');
+    expect(report).toContain('# Migration report — execution');
+    expect(report).toContain('## Source → target mapping');
   });
 
   it('apply sai 1 quando alguma ação falha, e o relatório mostra o motivo', async () => {
@@ -175,9 +175,9 @@ describe('comandos da CLI', () => {
 
     expect(code).toBe(EXIT.problems);
     const report = await readFile(join(outDir, 'migration-report.md'), 'utf8');
-    expect(report).toContain('## Falhas');
+    expect(report).toContain('## Failures');
     expect(report).toContain('`validation`');
-    expect(logger.errors.join(' ')).toContain('Reexecutar é seguro');
+    expect(logger.errors.join(' ')).toContain('Re-running is safe');
   });
 
   it('apply reutiliza um plano já gerado, sem reextrair', async () => {
@@ -198,12 +198,12 @@ describe('comandos da CLI', () => {
 
     const planOnly = join(outDir, 'plan-report.md');
     expect(await runReport(deps, { outDir, out: planOnly })).toBe(EXIT.ok);
-    expect(await readFile(planOnly, 'utf8')).toContain('— plano');
+    expect(await readFile(planOnly, 'utf8')).toContain('— plan');
 
     await runApply(deps, { outDir, yes: true });
     const afterApply = join(outDir, 'exec-report.md');
     await runReport(deps, { outDir, out: afterApply });
-    expect(await readFile(afterApply, 'utf8')).toContain('— execução');
+    expect(await readFile(afterApply, 'utf8')).toContain('— execution');
   });
 
   describe('sync incremental', () => {
@@ -259,7 +259,7 @@ describe('comandos da CLI', () => {
       const code = await runSync(deps, { outDir });
 
       expect(code).toBe(EXIT.ok);
-      expect(logger.warns.join(' ')).toContain('SIMULAÇÃO');
+      expect(logger.warns.join(' ')).toContain('SIMULATION');
       // Avançar aqui esconderia itens que nunca chegaram ao destino.
       expect(await deps.syncState?.read('acme/api')).toBeNull();
     });
@@ -279,7 +279,7 @@ describe('comandos da CLI', () => {
       const code = await runSync({ ...deps, source: vazia }, { outDir, yes: true });
 
       expect(code).toBe(EXIT.ok);
-      expect(logger.infos.join(' ')).toContain('Nada novo');
+      expect(logger.infos.join(' ')).toContain('Nothing new');
       expect(target.calls.filter((call) => call.startsWith('createIssue'))).toEqual([]);
       expect(await deps.syncState?.read('acme/api')).not.toBeNull();
     });
@@ -299,6 +299,6 @@ describe('comandos da CLI', () => {
 
   it('ledger vazio diz que está vazio, em vez de sair em silêncio', async () => {
     expect(await runLedger(deps, {})).toBe(EXIT.ok);
-    expect(stdout.join('')).toContain('ledger vazio');
+    expect(stdout.join('')).toContain('ledger is empty');
   });
 });

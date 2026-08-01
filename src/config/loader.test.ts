@@ -110,8 +110,8 @@ target:
   });
 
   it('rejeita YAML malformado e arquivo vazio com mensagem clara', () => {
-    expect(() => parseConfig('version: 1\n  source: [', 'config.yaml')).toThrow(/YAML inválido/);
-    expect(() => parseConfig('', 'config.yaml')).toThrow(/está vazio/);
+    expect(() => parseConfig('version: 1\n  source: [', 'config.yaml')).toThrow(/Invalid YAML/);
+    expect(() => parseConfig('', 'config.yaml')).toThrow(/is empty/);
   });
 
   it('exige versão explícita do formato', () => {

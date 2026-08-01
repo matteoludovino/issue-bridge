@@ -58,7 +58,7 @@ export class JsonRollbackStore implements RollbackStore {
       if (isNotFound(cause)) return new JsonRollbackStore(filePath, entries);
       throw new MigrationError({
         code: 'unknown',
-        message: `Não foi possível ler o ledger em ${filePath}.`,
+        message: `Could not read the ledger at ${filePath}.`,
         cause,
       });
     }
@@ -68,7 +68,7 @@ export class JsonRollbackStore implements RollbackStore {
       // Ledger corrompido é perigoso: seguir em frente recriaria tudo no destino.
       throw new MigrationError({
         code: 'validation',
-        message: `Ledger em ${filePath} está inválido (${parsed.error.issues[0]?.message ?? 'formato desconhecido'}). Corrija ou remova o arquivo antes de continuar.`,
+        message: `Ledger at ${filePath} is invalid (${parsed.error.issues[0]?.message ?? 'unknown format'}). Fix or remove the file before continuing.`,
       });
     }
 
@@ -114,7 +114,7 @@ export class JsonRollbackStore implements RollbackStore {
     } catch (cause: unknown) {
       throw new MigrationError({
         code: 'unknown',
-        message: `Falha ao gravar o ledger em ${this.filePath}; interrompa a migração para não perder o mapeamento.`,
+        message: `Failed to write the ledger at ${this.filePath}; stop the migration so the mapping is not lost.`,
         cause,
       });
     }
@@ -135,7 +135,7 @@ function safeJsonParse(raw: string, filePath: string): unknown {
   } catch (cause: unknown) {
     throw new MigrationError({
       code: 'validation',
-      message: `Ledger em ${filePath} não é JSON válido.`,
+      message: `Ledger at ${filePath} is not valid JSON.`,
       cause,
     });
   }

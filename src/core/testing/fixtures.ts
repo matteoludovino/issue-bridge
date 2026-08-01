@@ -60,7 +60,7 @@ export function makeIssue(options: IssueOptions): Issue {
   };
 }
 
-export function makeComment(id: string, body = 'comentário'): Comment {
+export function makeComment(id: string, body = 'a comment'): Comment {
   return {
     sourceRef: ref('comment', id),
     author: person('Bruno Lima'),
@@ -278,7 +278,7 @@ export class FakeTargetAdapter implements TargetAdapter {
     this.calls.push(`transitionIssue:${issueRef.id}:${targetStatus}`);
     if (this.failingSourceIds.has(issueRef.id)) {
       return Promise.reject(
-        new MigrationError({ code: 'validation', message: `transição rejeitada (${issueRef.id})` }),
+        new MigrationError({ code: 'validation', message: `transition rejected (${issueRef.id})` }),
       );
     }
     return Promise.resolve();
@@ -311,7 +311,7 @@ export class FakeTargetAdapter implements TargetAdapter {
       return Promise.reject(
         new MigrationError({
           code: 'transient',
-          message: `falha transitória programada em ${method} (${identifier})`,
+          message: `scheduled transient failure in ${method} (${identifier})`,
         }),
       );
     }
@@ -320,7 +320,7 @@ export class FakeTargetAdapter implements TargetAdapter {
       return Promise.reject(
         new MigrationError({
           code: 'validation',
-          message: `falha permanente programada em ${method} (${identifier})`,
+          message: `scheduled permanent failure in ${method} (${identifier})`,
         }),
       );
     }

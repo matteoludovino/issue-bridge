@@ -7,103 +7,105 @@ import type {
 } from '../core/models/migration-plan.js';
 
 /**
- * Geração do relatório em markdown. Funções PURAS: recebem plano e resultado,
- * devolvem string. Sem I/O, sem data do sistema — o que permite testar o
- * conteúdo inteiro e versionar o relatório junto do resultado.
+ * Markdown report generation. PURE functions: they take a plan and a result and
+ * return a string. No I/O and no system clock, which is what makes the whole
+ * content testable and the report reproducible from its inputs.
  */
 
 const ACTION_LABELS: Record<PlanAction['kind'], string> = {
-  create_epic: 'Épicos',
-  create_version: 'Versões',
-  create_component: 'Componentes',
+  create_epic: 'Epics',
+  create_version: 'Versions',
+  create_component: 'Components',
   create_label: 'Labels',
   create_issue: 'Issues',
-  create_comment: 'Comentários',
-  create_attachment: 'Anexos',
+  create_comment: 'Comments',
+  create_attachment: 'Attachments',
   create_link: 'Links',
-  transition_issue: 'Transições',
+  transition_issue: 'Transitions',
 };
 
 const FINDING_HINTS: Partial<Record<PlanFindingCode, string>> = {
-  missing_required_field: 'Preencha em `mappings.fields` no arquivo de configuração.',
-  unmapped_value: 'Ajuste `mappings` para um valor que exista no destino.',
-  dependency_cycle: 'Corrija a hierarquia na origem; as issues do ciclo ficaram fora do plano.',
-  unreachable_status: 'O workflow do destino pode exigir passos intermediários.',
-  hierarchy_conflict: 'O destino aceita um único pai por issue.',
+  missing_required_field: 'Provide a value under `mappings.fields` in the configuration file.',
+  unmapped_value: 'Point `mappings` at a value that exists in the target.',
+  dependency_cycle: 'Fix the hierarchy in the source; the issues in the cycle were left out.',
+  unreachable_status: 'The target workflow may require intermediate steps.',
+  hierarchy_conflict: 'The target accepts a single parent per issue.',
 };
 
-/** Relatório do `analyze`: o que será feito e o que impede. */
+/** The `analyze` report: what will be done, and what blocks it. */
 export function renderPlanReport(plan: MigrationPlan): string {
   const errors = plan.findings.filter((finding) => finding.severity === 'error');
   const warnings = plan.findings.filter((finding) => finding.severity === 'warning');
   const infos = plan.findings.filter((finding) => finding.severity === 'info');
 
   const lines: string[] = [
-    '# Relatório de migração — plano',
+    '# Migration report — plan',
     '',
-    `- **Origem:** \`${plan.model.source.platform}:${plan.model.source.identifier}\``,
-    `- **Destino:** projeto \`${plan.targetProjectKey}\``,
-    `- **Extraído em:** ${plan.model.source.extractedAt}`,
-    `- **Plano gerado em:** ${plan.generatedAt}`,
-    `- **Issues na origem:** ${String(plan.model.issues.length)}`,
+    `- **Source:** \`${plan.model.source.platform}:${plan.model.source.identifier}\``,
+    `- **Target:** project \`${plan.targetProjectKey}\``,
+    `- **Extracted at:** ${plan.model.source.extractedAt}`,
+    `- **Plan generated at:** ${plan.generatedAt}`,
+    `- **Issues in source:** ${String(plan.model.issues.length)}`,
     '',
     errors.length > 0
-      ? `> **Plano bloqueado:** ${String(errors.length)} erro(s) precisam ser resolvidos antes do \`apply\`.`
-      : '> Plano válido: nenhum erro bloqueante.',
+      ? `> **Plan blocked:** ${String(errors.length)} error(s) must be resolved before \`apply\`.`
+      : '> Plan is valid: no blocking errors.',
     '',
-    '## Ações planejadas',
+    '## Planned actions',
     '',
     ...renderActionTable(plan.actions),
     '',
   ];
 
   if (errors.length > 0) {
-    lines.push('## Erros (bloqueiam o apply)', '', ...renderFindings(errors), '');
+    lines.push('## Errors (these block apply)', '', ...renderFindings(errors), '');
   }
   if (warnings.length > 0) {
-    lines.push('## Avisos', '', ...renderFindings(warnings), '');
+    lines.push('## Warnings', '', ...renderFindings(warnings), '');
   }
   if (infos.length > 0) {
-    lines.push('## Observações', '', ...renderFindings(infos), '');
+    lines.push('## Notes', '', ...renderFindings(infos), '');
   }
 
   return `${lines.join('\n').trimEnd()}\n`;
 }
 
-/** Relatório do `apply`: o que aconteceu de fato, com o mapa origem → destino. */
+/** The `apply` report: what actually happened, with the source → target map. */
 export function renderExecutionReport(plan: MigrationPlan, result: ExecutionResult): string {
   const total = result.succeeded.length + result.skipped.length + result.failed.length;
   const retried = result.succeeded.filter((outcome) => outcome.attempts > 1);
 
   const lines: string[] = [
-    `# Relatório de migração — ${result.dryRun ? 'simulação' : 'execução'}`,
+    `# Migration report — ${result.dryRun ? 'simulation' : 'execution'}`,
     '',
-    `- **Origem:** \`${plan.model.source.platform}:${plan.model.source.identifier}\``,
-    `- **Destino:** projeto \`${plan.targetProjectKey}\``,
-    `- **Início:** ${result.startedAt}`,
-    `- **Fim:** ${result.finishedAt}`,
-    result.dryRun ? '- **Modo:** simulação — nada foi escrito no destino.' : '- **Modo:** execução real.',
+    `- **Source:** \`${plan.model.source.platform}:${plan.model.source.identifier}\``,
+    `- **Target:** project \`${plan.targetProjectKey}\``,
+    `- **Started:** ${result.startedAt}`,
+    `- **Finished:** ${result.finishedAt}`,
+    result.dryRun
+      ? '- **Mode:** simulation — nothing was written to the target.'
+      : '- **Mode:** real execution.',
     '',
-    '## Resumo',
+    '## Summary',
     '',
-    '| Situação | Ações |',
+    '| Outcome | Actions |',
     '| --- | --- |',
-    `| Concluídas | ${String(result.succeeded.length)} |`,
-    `| Puladas (já migradas) | ${String(result.skipped.length)} |`,
-    `| Falhas | ${String(result.failed.length)} |`,
+    `| Completed | ${String(result.succeeded.length)} |`,
+    `| Skipped (already migrated) | ${String(result.skipped.length)} |`,
+    `| Failed | ${String(result.failed.length)} |`,
     `| **Total** | **${String(total)}** |`,
     '',
   ];
 
   if (retried.length > 0) {
     lines.push(
-      `${String(retried.length)} ação(ões) só passaram após retry — sinal de rate limit ou instabilidade na API.`,
+      `${String(retried.length)} action(s) only succeeded after a retry — a sign of rate limiting or API instability.`,
       '',
     );
   }
 
   if (result.failed.length > 0) {
-    lines.push('## Falhas', '', ...renderFailures(result.failed), '');
+    lines.push('## Failures', '', ...renderFailures(result.failed), '');
   }
 
   const created = result.succeeded.filter(
@@ -111,9 +113,9 @@ export function renderExecutionReport(plan: MigrationPlan, result: ExecutionResu
   );
   if (created.length > 0) {
     lines.push(
-      '## Correspondência origem → destino',
+      '## Source → target mapping',
       '',
-      '| Origem | Destino |',
+      '| Source | Target |',
       '| --- | --- |',
       ...created.map((outcome) => {
         const source = sourceLink(outcome.action);
@@ -131,12 +133,7 @@ export function renderExecutionReport(plan: MigrationPlan, result: ExecutionResu
 
   const notMigrated = plan.findings.filter((finding) => finding.code === 'not_migrated');
   if (notMigrated.length > 0) {
-    lines.push(
-      '## Não migrado',
-      '',
-      ...notMigrated.map((finding) => `- ${finding.message}`),
-      '',
-    );
+    lines.push('## Not migrated', '', ...notMigrated.map((finding) => `- ${finding.message}`), '');
   }
 
   return `${lines.join('\n').trimEnd()}\n`;
@@ -148,10 +145,10 @@ function renderActionTable(actions: PlanAction[]): string[] {
     counts.set(action.kind, (counts.get(action.kind) ?? 0) + 1);
   }
 
-  if (counts.size === 0) return ['Nenhuma ação — a origem não produziu nada migrável.'];
+  if (counts.size === 0) return ['No actions — the source produced nothing migratable.'];
 
   return [
-    '| Tipo | Quantidade |',
+    '| Kind | Count |',
     '| --- | --- |',
     ...[...counts.entries()].map(([kind, count]) => `| ${ACTION_LABELS[kind]} | ${String(count)} |`),
     `| **Total** | **${String(actions.length)}** |`,
@@ -161,8 +158,7 @@ function renderActionTable(actions: PlanAction[]): string[] {
 function renderFindings(findings: PlanFinding[]): string[] {
   return findings.map((finding) => {
     const subject = finding.relatedSourceRef;
-    const where =
-      subject === undefined ? '' : ` — [${subject.humanRef}](${subject.url})`;
+    const where = subject === undefined ? '' : ` — [${subject.humanRef}](${subject.url})`;
     const hint = FINDING_HINTS[finding.code];
     const suffix = hint === undefined ? '' : ` _${hint}_`;
     return `- \`${finding.code}\`${where}: ${finding.message}${suffix}`;
@@ -171,11 +167,11 @@ function renderFindings(findings: PlanFinding[]): string[] {
 
 function renderFailures(failures: FailedOutcome[]): string[] {
   return [
-    '| Ação | Origem | Código | Tentativas | Erro |',
+    '| Action | Source | Code | Attempts | Error |',
     '| --- | --- | --- | --- | --- |',
     ...failures.map((failure) => {
       const code = failure.error.retryable
-        ? `${failure.error.code} (retentável)`
+        ? `${failure.error.code} (retryable)`
         : failure.error.code;
       return `| ${ACTION_LABELS[failure.action.kind]} | ${sourceLink(failure.action)} | \`${code}\` | ${String(failure.attempts)} | ${escapePipes(failure.error.message)} |`;
     }),
@@ -189,7 +185,7 @@ function sourceLink(action: PlanAction): string {
   return `[${action.sourceRef.humanRef}](${action.sourceRef.url})`;
 }
 
-/** Pipe cru quebraria a tabela markdown. */
+/** A raw pipe would break the markdown table. */
 function escapePipes(text: string): string {
   return text.replace(/\|/g, '\\|').replace(/\n+/g, ' ');
 }

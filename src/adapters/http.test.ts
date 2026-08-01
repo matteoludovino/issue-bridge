@@ -8,7 +8,7 @@ describe('redactUrl', () => {
       'https://acme.atlassian.net/rest/api/3/issue/ENG-5',
     );
     expect(redactUrl('https://api.github.com/repos/acme/api/issues?since=2026-01-01&page=2')).toBe(
-      'https://api.github.com/repos/acme/api/issues?[redigido]',
+      'https://api.github.com/repos/acme/api/issues?[redacted]',
     );
   });
 
@@ -27,7 +27,7 @@ describe('redactUrl', () => {
     );
 
     expect(error.message).not.toContain('segredo');
-    expect(error.message).toContain('[redigido]');
+    expect(error.message).toContain('[redacted]');
   });
 
   it('URL malformada ainda perde a query', () => {

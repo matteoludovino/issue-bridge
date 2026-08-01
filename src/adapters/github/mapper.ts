@@ -51,7 +51,7 @@ export function commentRef(context: MapperContext, comment: GitHubComment): Sour
   return {
     platform: PLATFORM,
     id: `${PLATFORM}:${context.scope}:comment:${String(comment.id)}`,
-    humanRef: `comentário ${String(comment.id)}`,
+    humanRef: `comment ${String(comment.id)}`,
     url: comment.html_url,
   };
 }

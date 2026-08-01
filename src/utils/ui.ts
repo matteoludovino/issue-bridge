@@ -61,7 +61,7 @@ export class ProgressLine {
   ) {}
 
   update(done: number, total: number, failures: number): void {
-    const suffix = failures > 0 ? color.red(` ${String(failures)} falha(s)`) : '';
+    const suffix = failures > 0 ? color.red(` ${String(failures)} failure(s)`) : '';
     const text = `${this.label} ${String(done)}/${String(total)}${suffix}`;
 
     if (this.stream.isTTY === true) {

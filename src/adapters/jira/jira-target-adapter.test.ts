@@ -395,7 +395,7 @@ describe('JiraTargetAdapter — escrita', () => {
       adapterWith(client).transitionIssue({ id: '10500', humanRef: 'ENG-5' }, 'Done'),
     ).rejects.toMatchObject({
       code: 'validation',
-      message: expect.stringContaining('Disponíveis: In Progress'),
+      message: expect.stringContaining('Available: In Progress'),
     });
   });
 

@@ -1,10 +1,10 @@
-# Configuração do issue-bridge (GitHub -> Jira).
+# issue-bridge configuration (GitHub -> Jira).
 #
-# Credenciais NUNCA ficam aqui: só o nome da variável de ambiente.
-# Este arquivo pode e deve ser versionado.
+# Credentials NEVER live here: only the name of the environment variable that
+# holds them. This file is meant to be committed.
 #
-# Chave desconhecida é ERRO, não é ignorada — um `milestoneStategy` com erro de
-# digitação falha na validação em vez de virar comportamento silencioso.
+# An unknown key is an ERROR, not something ignored — a typo like
+# `milestoneStategy` fails validation instead of quietly changing behaviour.
 
 version: 1
 
@@ -12,18 +12,22 @@ source:
   platform: github
   identifier: acme/api          # owner/repo
   tokenEnv: GITHUB_TOKEN
-  includeRaw: false             # true dobra o tamanho do snapshot
+  includeRaw: false             # true doubles the snapshot size
 
-  # Opcional: o GitHub não tem tipo nem prioridade, só label.
-  # O que estiver aqui é mesclado sobre os padrões do adapter.
+  # Optional. GitHub has no type or priority — only labels. Whatever you set
+  # here is merged on top of the adapter's defaults.
   # classification:
   #   typeByLabel:
-  #     epico: epic
-  #     melhoria: story
+  #     initiative: epic
+  #     improvement: story
   #   priorityByLabel:
-  #     urgentissimo: highest
-  #   inProgressLabels: ['em andamento', 'wip']   # substitui a lista padrão
+  #     showstopper: highest
+  #   inProgressLabels: ['in progress', 'wip']   # replaces the default list
   #   defaultType: task
+
+  # Base URLs for GitHub Enterprise Server.
+  # baseUrl: https://github.acme.com/api/v3
+  # webBaseUrl: https://github.acme.com
 
 target:
   platform: jira
@@ -31,15 +35,16 @@ target:
   projectKey: ENG
   emailEnv: JIRA_EMAIL
   tokenEnv: JIRA_API_TOKEN
-  epicIssueTypeName: Epic       # nome do tipo usado para épicos neste projeto
+  epicIssueTypeName: Epic       # name of the issue type used for epics here
   # linkTypeNames:
   #   blocks: Blocks
   #   duplicates: Duplicate
   #   relates_to: Relates
 
 mappings:
-  # Todo valor à direita é validado contra o destino em `analyze`:
-  # se não existir no Jira, sai finding `unmapped_value` e o apply é bloqueado.
+  # Every value on the right is validated against the target during `analyze`:
+  # if it does not exist in Jira you get an `unmapped_value` error and apply is
+  # blocked.
   issueTypes:
     epic: Epic
     story: Story
@@ -59,37 +64,37 @@ mappings:
     in_progress: In Progress
     closed: Done
 
-  milestoneStrategy: epic       # `epic` ou `version`
-  defaultPriority: medium       # opcional; sem isso a issue vai sem prioridade
+  milestoneStrategy: epic       # `epic` or `version`
+  defaultPriority: medium       # optional; without it, issues carry no priority
 
-  # Único canal capaz de satisfazer custom field OBRIGATÓRIO do Jira.
-  # Sem isso, qualquer projeto com campo obrigatório customizado bloqueia o apply
-  # com `missing_required_field` (o que é o comportamento correto: falhar no
-  # analyze, não no meio da escrita).
+  # The only channel that can satisfy a REQUIRED custom field in Jira. Without
+  # it, any project with a mandatory custom field blocks apply with
+  # `missing_required_field` — which is the correct behaviour: fail during
+  # analyze, not halfway through writing.
   fields:
     defaults: {}
     #   customfield_10042:
     #     value: Major
     byIssueType: {}
     #   Bug:
-    #     customfield_10050: regressão
+    #     customfield_10050: regression
 
 extract:
   includeClosed: true
-  labelFilter: []               # vazio = todas as issues
-  # maxItems: 500               # teto de itens lidos da API (issues + PRs)
+  labelFilter: []               # empty = every issue
+  # maxItems: 500               # cap on items read from the API (issues + PRs)
 
-  # Piso fixo de data de alteração, para recortar histórico longo. O `sync` usa a
-  # própria marca d'água quando ela é mais recente que isto.
+  # Hard floor on the change date, to cut off a long history. `sync` uses its own
+  # watermark whenever that is more recent than this value.
   # updatedSince: 2026-01-01T00:00:00Z
 
 execution:
-  ledgerPath: .issue-bridge/ledger.json          # mapa origem -> destino (idempotência)
-  syncStatePath: .issue-bridge/sync-state.json   # marca d'água do sync
+  ledgerPath: .issue-bridge/ledger.json          # source -> target map (idempotency)
+  syncStatePath: .issue-bridge/sync-state.json   # sync watermark
 
-  # Ações independentes escritas em paralelo (o escalonador respeita dependsOn).
-  # Acima de ~8 o rate limit do destino vira o gargalo. Use 1 para depurar com
-  # ordem determinística.
+  # Independent actions written in parallel (the scheduler honours dependsOn).
+  # Past roughly 8, the target's rate limit becomes the bottleneck. Use 1 to
+  # debug with a deterministic order.
   concurrency: 4
 
   retry:

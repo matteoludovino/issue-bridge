@@ -139,7 +139,7 @@ describe('CLI — ajuda e erros de configuração', () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('ledger vazio');
+    expect(result.stdout).toContain('ledger is empty');
   });
 
   it('ledger --json imprime JSON no stdout, não a mensagem humana', async () => {
@@ -153,7 +153,7 @@ describe('CLI — ajuda e erros de configuração', () => {
     // Regressão: o `--json` do comando e o global são o mesmo flag no commander.
     expect(result.code).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual([]);
-    expect(result.stdout).not.toContain('vazio');
+    expect(result.stdout).not.toContain('empty');
   });
 });
 
@@ -359,7 +359,7 @@ describe('CLI — migração completa contra servidor local', () => {
       'transition_issue',
     ]);
     expect(await readFile(join(workdir, '.issue-bridge', 'migration-report.md'), 'utf8')).toContain(
-      'Plano válido',
+      'Plan is valid',
     );
 
     // ── apply sem --yes: simulação, nada escrito
@@ -369,7 +369,7 @@ describe('CLI — migração completa contra servidor local', () => {
       env,
     });
     expect(simulated.code).toBe(0);
-    expect(simulated.stderr).toContain('SIMULAÇÃO');
+    expect(simulated.stderr).toContain('SIMULATION');
     expect(requests.filter((entry) => entry.method === 'POST')).toHaveLength(before);
 
     // ── apply --yes: escreve de verdade
@@ -411,8 +411,8 @@ describe('CLI — migração completa contra servidor local', () => {
     });
 
     const report = await readFile(join(workdir, '.issue-bridge', 'migration-report.md'), 'utf8');
-    expect(report).toContain('# Relatório de migração — execução');
-    expect(report).toContain('| Falhas | 0 |');
+    expect(report).toContain('# Migration report — execution');
+    expect(report).toContain('| Failed | 0 |');
     expect(report).toContain(`${baseUrl}/browse/ENG-2`);
 
     // ── ledger: persistido em disco pelo processo anterior
@@ -490,7 +490,7 @@ function syncTests(context: {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stderr).toContain('SIMULAÇÃO');
+    expect(result.stderr).toContain('SIMULATION');
     expect(await readFile(statePath, 'utf8')).toBe(before);
   }, 60_000);
 }

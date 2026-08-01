@@ -168,7 +168,7 @@ export class JiraTargetAdapter implements TargetAdapter {
       async () =>
         (await this.http.get('/rest/api/3/label?maxResults=1000', JiraLabelsSchema)).values,
       [],
-      'não foi possível listar labels do Jira; o plano vai tentar criar todas',
+      'could not list Jira labels; the plan will try to create all of them',
     );
 
     return {
@@ -294,7 +294,7 @@ export class JiraTargetAdapter implements TargetAdapter {
       { body: markdownToAdf(input.body) },
       JiraCreatedCommentSchema,
     );
-    return { id: created.id, humanRef: `${input.issueRef.humanRef} · comentário ${created.id}` };
+    return { id: created.id, humanRef: `${input.issueRef.humanRef} · comment ${created.id}` };
   }
 
   async createAttachment(input: CreateAttachmentInput): Promise<TargetItemRef> {
@@ -312,7 +312,7 @@ export class JiraTargetAdapter implements TargetAdapter {
     if (attachment === undefined) {
       throw new MigrationError({
         code: 'unknown',
-        message: `Jira aceitou o anexo "${input.payload.filename}" mas não devolveu referência.`,
+        message: `Jira accepted attachment "${input.payload.filename}" but returned no reference.`,
         subjectKey: input.sourceRef.id,
       });
     }
@@ -353,8 +353,8 @@ export class JiraTargetAdapter implements TargetAdapter {
     if (match === undefined) {
       throw new MigrationError({
         code: 'validation',
-        message: `Status "${targetStatus}" não é alcançável em um passo para ${issueRef.humanRef}. Disponíveis: ${
-          available.transitions.map((transition) => transition.to.name).join(', ') || 'nenhuma'
+        message: `Status "${targetStatus}" is not reachable in a single step for ${issueRef.humanRef}. Available: ${
+          available.transitions.map((transition) => transition.to.name).join(', ') || 'none'
         }.`,
       });
     }
@@ -385,7 +385,7 @@ export class JiraTargetAdapter implements TargetAdapter {
     for (const identifier of assignees) {
       const accountId = await this.resolveAccountId(identifier);
       if (accountId !== null) return accountId;
-      this.logger?.warn('Assignee sem correspondente no Jira; issue segue sem responsável', {
+      this.logger?.warn('Assignee has no match in Jira; the issue will be created unassigned', {
         identifier,
       });
     }
@@ -407,7 +407,7 @@ export class JiraTargetAdapter implements TargetAdapter {
             JiraUserSearchSchema,
           ),
         [],
-        `busca de usuário falhou para "${identifier}"`,
+        `user search failed for "${identifier}"`,
       );
       accountId = found[0]?.accountId ?? null;
     }

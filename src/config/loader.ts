@@ -27,7 +27,7 @@ export async function loadConfig(filePath: string, env: EnvLike): Promise<Loaded
   } catch (cause: unknown) {
     throw new MigrationError({
       code: 'not-found',
-      message: `Arquivo de configuração não encontrado em ${filePath}.`,
+      message: `Configuration file not found at ${filePath}.`,
       cause,
     });
   }
@@ -44,7 +44,7 @@ export function parseConfig(raw: string, filePath: string): MigrationConfig {
   } catch (cause: unknown) {
     throw new MigrationError({
       code: 'validation',
-      message: `YAML inválido em ${filePath}: ${
+      message: `Invalid YAML in ${filePath}: ${
         cause instanceof YAMLParseError ? cause.message : String(cause)
       }`,
       cause,
@@ -54,7 +54,7 @@ export function parseConfig(raw: string, filePath: string): MigrationConfig {
   if (document === null || document === undefined) {
     throw new MigrationError({
       code: 'validation',
-      message: `Arquivo de configuração ${filePath} está vazio.`,
+      message: `Configuration file ${filePath} is empty.`,
     });
   }
 
@@ -63,11 +63,11 @@ export function parseConfig(raw: string, filePath: string): MigrationConfig {
 
   // Reporta TODOS os problemas de uma vez: corrigir config de 6 em 6 é ruim.
   const problems = result.error.issues
-    .map((issue) => `  • ${issue.path.join('.') || '(raiz)'}: ${issue.message}`)
+    .map((issue) => `  • ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     .join('\n');
   throw new MigrationError({
     code: 'validation',
-    message: `Configuração inválida em ${filePath}:\n${problems}`,
+    message: `Invalid configuration in ${filePath}:\n${problems}`,
     cause: result.error,
   });
 }
@@ -88,8 +88,8 @@ export function resolveCredentials(config: MigrationConfig, env: EnvLike): Crede
   if (missing.length > 0) {
     throw new MigrationError({
       code: 'auth',
-      message: `Variáveis de ambiente não definidas:\n${missing
-        .map(({ key, variable }) => `  • ${variable} (referenciada em ${key})`)
+      message: `Environment variables not set:\n${missing
+        .map(({ key, variable }) => `  • ${variable} (referenced by ${key})`)
         .join('\n')}`,
     });
   }

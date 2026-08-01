@@ -86,10 +86,10 @@ export const readSnapshot = (filePath: string): Promise<IssueModel> =>
   readValidated(filePath, IssueModelSchema, 'snapshot');
 
 export const readPlan = (filePath: string): Promise<MigrationPlan> =>
-  readValidated(filePath, MigrationPlanSchema, 'plano');
+  readValidated(filePath, MigrationPlanSchema, 'plan');
 
 export const readExecution = (filePath: string): Promise<ExecutionResult> =>
-  readValidated(filePath, ExecutionResultSchema, 'log de execução');
+  readValidated(filePath, ExecutionResultSchema, 'execution log');
 
 async function readValidated<S extends z.ZodTypeAny>(
   filePath: string,
@@ -102,7 +102,7 @@ async function readValidated<S extends z.ZodTypeAny>(
   } catch (cause: unknown) {
     throw new MigrationError({
       code: 'not-found',
-      message: `Não encontrei o ${label} em ${filePath}.`,
+      message: `Could not find the ${label} at ${filePath}.`,
       cause,
     });
   }
@@ -113,7 +113,7 @@ async function readValidated<S extends z.ZodTypeAny>(
   } catch (cause: unknown) {
     throw new MigrationError({
       code: 'validation',
-      message: `O ${label} em ${filePath} não é JSON válido.`,
+      message: `The ${label} at ${filePath} is not valid JSON.`,
       cause,
     });
   }
@@ -123,7 +123,7 @@ async function readValidated<S extends z.ZodTypeAny>(
 
   throw new MigrationError({
     code: 'validation',
-    message: `O ${label} em ${filePath} está fora do formato esperado (provavelmente gerado por outra versão): ${
+    message: `The ${label} at ${filePath} does not match the expected format (most likely written by another version): ${
       result.error.issues
         .slice(0, 3)
         .map((issue) => `${issue.path.join('.')} ${issue.message}`)
