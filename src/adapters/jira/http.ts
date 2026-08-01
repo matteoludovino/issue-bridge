@@ -1,7 +1,13 @@
 import { Buffer } from 'node:buffer';
 import type { z } from 'zod';
 import { MigrationError } from '../../core/errors.js';
-import { retryDelayMs, summarizeBody, type HttpClient, type HttpResponse } from '../http.js';
+import {
+  redactUrl,
+  retryDelayMs,
+  summarizeBody,
+  type HttpClient,
+  type HttpResponse,
+} from '../http.js';
 
 export interface JiraHttpOptions {
   /** Ex.: `https://acme.atlassian.net`. */
@@ -150,7 +156,9 @@ export class JiraHttp {
  * ausente e valor inválido de custom field. A mensagem preserva `errorMessages`
  * e `errors` para o relatório apontar exatamente qual campo reprovou.
  */
-export function toMigrationError(response: HttpResponse, url: string): MigrationError {
+export function toMigrationError(response: HttpResponse, rawUrl: string): MigrationError {
+  // Nunca interpolar a URL crua: a query string pode carregar conteúdo privado.
+  const url = redactUrl(rawUrl);
   const detail = describeJiraError(response.body);
   const retryAfterMs = retryDelayMs(response.headers);
 

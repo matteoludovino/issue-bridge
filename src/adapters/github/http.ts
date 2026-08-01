@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import { MigrationError } from '../../core/errors.js';
 import {
   nextPageUrl,
+  redactUrl,
   retryDelayMs,
   summarizeBody,
   type HttpClient,
@@ -133,7 +134,9 @@ export class GitHubHttp {
  * responde 403/429 com `x-ratelimit-remaining: 0` e `x-ratelimit-reset`.
  * Ambos viram `rate-limit` com espera sugerida.
  */
-export function toMigrationError(response: HttpResponse, url: string): MigrationError {
+export function toMigrationError(response: HttpResponse, rawUrl: string): MigrationError {
+  // Nunca interpolar a URL crua: a query string pode carregar conteúdo privado.
+  const url = redactUrl(rawUrl);
   const retryAfterMs = retryDelayMs(response.headers);
   const detail = summarizeBody(response.body, 200);
 

@@ -99,6 +99,25 @@ export function nextPageUrl(linkHeader: string | undefined): string | undefined 
   return undefined;
 }
 
+/**
+ * Remove a query string de uma URL antes de ela entrar em mensagem de erro, log
+ * ou relatório.
+ *
+ * Não é paranoia: a busca do Jira leva o JQL na query (`?jql=project = "ENG" AND
+ * summary ~ "..."`), então uma falha de rede numa reconciliação despejaria título
+ * de issue privada no log. O caminho basta para diagnosticar.
+ */
+export function redactUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const suffix = parsed.search.length > 0 ? '?[redigido]' : '';
+    return `${parsed.origin}${parsed.pathname}${suffix}`;
+  } catch {
+    // URL malformada: devolver o caminho sem query, na força bruta.
+    return url.split('?')[0] ?? url;
+  }
+}
+
 /** Trecho do corpo de erro, para mensagens acionáveis sem despejar payload inteiro. */
 export function summarizeBody(body: string, limit = 300): string {
   const trimmed = body.trim();

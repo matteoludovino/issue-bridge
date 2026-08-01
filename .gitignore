@@ -2,3 +2,12 @@ node_modules/
 dist/
 *.log
 .env
+
+# Local configuration. The versioned template is issue-bridge.example.yaml.
+issue-bridge.yaml
+
+# Migration artifacts. snapshot.json holds the full body of every extracted
+# issue, including from private repositories — never commit it to a public repo.
+# Teams that share a ledger between operators should un-ignore ledger.json and
+# sync-state.json in a local exclude file rather than here.
+.issue-bridge/
