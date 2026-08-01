@@ -214,9 +214,10 @@ describe('Executor', () => {
     ).toMatchObject({ code: 'validation', retryable: false });
     // Falha não-retentável: uma tentativa só, sem espera.
     expect(sleeper.delays).toEqual([]);
+    // O dependente é bloqueado pelo escalonador, antes de qualquer chamada.
     expect(
       result.failed.find((failure) => failure.action.kind === 'create_comment')?.error.message,
-    ).toContain('não foi criada');
+    ).toContain('Dependência de');
     expect(logger.errors).toHaveLength(2);
   });
 
@@ -234,7 +235,9 @@ describe('Executor', () => {
       'comment:fake:acme/api:comment:c1',
       'attachment:fake:acme/api:attachment:a1',
       'link:fake:acme/api:issue:1|relates_to|fake:acme/api:issue:2',
-      'transition:fake:acme/api:issue:2',
+      // O status de destino faz parte do id: é o que permite o `sync` aplicar
+      // uma nova transição na mesma issue.
+      'transition:fake:acme/api:issue:2:Done',
     ]);
     // O épico não dependia de nada e foi criado.
     expect(result.succeeded.map((outcome) => outcome.action.id)).toEqual([
@@ -345,6 +348,131 @@ describe('Executor', () => {
     // A 4ª ação é o comentário, que falha.
     expect(events[3]).toBe('4/7:1');
     expect(events.at(-1)).toBe('7/7:1');
+  });
+
+  it('com concurrency 1 mantém a ordem exata do plano', async () => {
+    const plan = scenarioPlan();
+    await executor.execute(plan, { concurrency: 1 });
+
+    expect(methodsCalled(adapter)).toEqual([
+      'createEpic',
+      'createIssue',
+      'createIssue',
+      'createComment',
+      'createAttachment',
+      'createLink',
+      'transitionIssue',
+    ]);
+    expect(adapter.maxInFlight).toBe(1);
+  });
+
+  it('executa ações independentes em paralelo, respeitando dependências', async () => {
+    // Duas issues irmãs, cada uma com comentário: os comentários dependem só da
+    // própria issue, então há trabalho genuinamente paralelizável.
+    const plan = buildPlan(
+      makeModel({
+        issues: [
+          makeIssue({ id: '1', comments: [makeComment('c1')] }),
+          makeIssue({ id: '2', comments: [makeComment('c2')] }),
+          makeIssue({ id: '3', comments: [makeComment('c3')] }),
+        ],
+      }),
+      makeCapabilities(),
+      makeMappingConfig(),
+      'ENG',
+      options,
+    );
+
+    const result = await executor.execute(plan, { concurrency: 3 });
+
+    expect(result.failed).toEqual([]);
+    expect(result.succeeded).toHaveLength(6);
+    // Prova de paralelismo: mais de uma chamada simultânea ao destino.
+    expect(adapter.maxInFlight).toBeGreaterThan(1);
+    expect(adapter.maxInFlight).toBeLessThanOrEqual(3);
+
+    // Invariante que o paralelismo não pode violar: a issue existe antes do
+    // comentário dela.
+    for (const suffix of ['1', '2', '3']) {
+      const issueAt = adapter.calls.findIndex((call) =>
+        call.startsWith(`createIssue:fake:acme/api:issue:${suffix}`),
+      );
+      const commentAt = adapter.calls.findIndex((call) =>
+        call.includes(`comment:c${suffix}@`),
+      );
+      expect(issueAt).toBeGreaterThanOrEqual(0);
+      expect(commentAt).toBeGreaterThan(issueAt);
+    }
+
+    // Resultado volta na ordem do plano, não na de conclusão.
+    expect(result.succeeded.map((outcome) => outcome.action.id)).toEqual(
+      plan.actions.map((action) => action.id),
+    );
+  });
+
+  it('não começa o dependente antes do pai terminar, mesmo com folga de concorrência', async () => {
+    const parent = makeIssue({ id: '1' });
+    const child = makeIssue({ id: '2', parentSourceRef: parent.sourceRef, type: 'subtask' });
+    const plan = buildPlan(
+      makeModel({ issues: [parent, child] }),
+      makeCapabilities(),
+      makeMappingConfig(),
+      'ENG',
+      options,
+    );
+
+    // Segura a criação do pai; o filho não pode aparecer nas chamadas enquanto isso.
+    let release = (): void => {};
+    adapter.gates.set(
+      'fake:acme/api:issue:1',
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+
+    const execution = executor.execute(plan, { concurrency: 4 });
+    // Drena a fila de microtasks: o executor faz vários `await` (ledger,
+    // dependências) antes de chamar o destino.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(adapter.calls).toEqual(['createIssue:fake:acme/api:issue:1']);
+
+    release();
+    const result = await execution;
+
+    expect(result.failed).toEqual([]);
+    expect(adapter.calls).toEqual([
+      'createIssue:fake:acme/api:issue:1',
+      'createIssue:fake:acme/api:issue:2',
+    ]);
+  });
+
+  it('paralelismo não faz o dependente de uma falha gastar tentativa', async () => {
+    const plan = buildPlan(
+      makeModel({
+        issues: [
+          makeIssue({ id: '1', comments: [makeComment('c1')] }),
+          makeIssue({ id: '2', comments: [makeComment('c2')] }),
+        ],
+      }),
+      makeCapabilities(),
+      makeMappingConfig(),
+      'ENG',
+      options,
+    );
+    adapter.failingSourceIds.add('fake:acme/api:issue:1');
+
+    const result = await executor.execute(plan, { concurrency: 4 });
+
+    expect(result.failed.map((failure) => failure.action.id)).toEqual([
+      'issue:fake:acme/api:issue:1',
+      'comment:fake:acme/api:comment:c1',
+    ]);
+    expect(result.succeeded.map((outcome) => outcome.action.id)).toEqual([
+      'issue:fake:acme/api:issue:2',
+      'comment:fake:acme/api:comment:c2',
+    ]);
+    // O comentário órfão nunca chegou ao destino.
+    expect(adapter.calls.some((call) => call.includes('comment:c1'))).toBe(false);
   });
 
   it('marca link no ledger mesmo quando o destino não devolve referência', async () => {

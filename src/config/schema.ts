@@ -116,6 +116,12 @@ const ExtractConfigSchema = z
     labelFilter: z.array(z.string()).default([]),
     /** Teto de itens lidos da API (issues + PRs, que são descartados). */
     maxItems: z.number().int().positive().optional(),
+    /**
+     * Piso fixo de data de alteração (ISO 8601). Serve para recortar um
+     * histórico longo; o `sync` usa a própria marca d'água quando ela é mais
+     * recente que este valor.
+     */
+    updatedSince: z.string().datetime({ offset: true }).optional(),
   })
   .strict()
   .default({});
@@ -124,7 +130,15 @@ const ExecutionConfigSchema = z
   .object({
     /** Onde fica o ledger origem → destino. */
     ledgerPath: z.string().min(1).default('.issue-bridge/ledger.json'),
+    /** Marca d'água do `sync`: até quando a origem já foi lida. */
+    syncStatePath: z.string().min(1).default('.issue-bridge/sync-state.json'),
     retry: RetryConfigSchema,
+    /**
+     * Ações independentes escritas em paralelo. Acima de ~8 o rate limit do
+     * destino costuma virar o gargalo — o retry absorve, mas fica mais lento.
+     * Use 1 para depurar com ordem determinística.
+     */
+    concurrency: z.number().int().min(1).max(16).default(4),
   })
   .strict()
   .default({});

@@ -23,6 +23,7 @@ import {
   writeJson,
   writeText,
 } from '../storage/artifacts.js';
+import type { SyncStateStore } from '../storage/sync-state.js';
 import { ProgressLine, color, formatNumber, symbol } from '../utils/ui.js';
 
 /**
@@ -50,6 +51,8 @@ export interface CommandDeps {
   logger: Logger;
   clock: Clock;
   attachments?: AttachmentFetcher;
+  /** Marca d'água do `sync`. Ausente, `sync` roda sempre completo. */
+  syncState?: SyncStateStore;
   sleeper?: Sleeper;
   /** Saída de DADOS (stdout). Log humano vai para stderr, via `logger`. */
   write?: (text: string) => void;
@@ -119,6 +122,80 @@ export async function runApply(deps: CommandDeps, options: ApplyOptions): Promis
       ? await preparePlan(deps, options)
       : await readPlan(options.plan);
 
+  return applyPlan(deps, plan, options);
+}
+
+export interface SyncOptions extends ApplyOptions {
+  /** Sobrescreve a marca d'água (ISO 8601). */
+  since?: string;
+  /** Ignora a marca d'água e relê a origem inteira. */
+  full?: boolean;
+}
+
+/**
+ * Migração incremental: lê da origem apenas o que mudou desde o último `sync`
+ * bem-sucedido, aplica, e só então avança a marca d'água.
+ *
+ * A marca gravada é o instante de INÍCIO da extração. Se um item for alterado
+ * durante a execução, ele cai na próxima janela em vez de ser perdido — o custo
+ * é reprocessar alguns itens, que a idempotência do ledger absorve.
+ *
+ * Limite conhecido: `sync` traz itens NOVOS (issues, comentários, transições de
+ * status). Alteração de título ou corpo de item já migrado não é propagada — o
+ * plano não tem ação de atualização.
+ */
+export async function runSync(deps: CommandDeps, options: SyncOptions): Promise<number> {
+  const identifier = deps.config.source.identifier;
+  const state = options.full === true ? null : ((await deps.syncState?.read(identifier)) ?? null);
+  const since = options.since ?? state?.lastSyncedAt;
+
+  // Capturado ANTES da extração, de propósito.
+  const startedAt = deps.clock.now();
+
+  deps.logger.info(
+    since === undefined
+      ? `Sync completo de ${identifier} (sem marca d'água anterior).`
+      : `Sync incremental de ${identifier}: alterações desde ${since}.`,
+  );
+
+  const plan = await preparePlan(deps, { ...options, ...(since === undefined ? {} : { since }) });
+
+  if (plan.actions.length === 0) {
+    deps.logger.info(`${symbol.ok} Nada novo na origem.`);
+    await advanceWatermark(deps, identifier, startedAt, options);
+    return EXIT.ok;
+  }
+
+  const code = await applyPlan(deps, plan, options);
+  if (code === EXIT.ok) await advanceWatermark(deps, identifier, startedAt, options);
+  return code;
+}
+
+/**
+ * A marca só avança quando a execução foi real e completa: em simulação ou com
+ * falha, avançar esconderia itens que nunca chegaram ao destino.
+ */
+async function advanceWatermark(
+  deps: CommandDeps,
+  identifier: string,
+  lastSyncedAt: string,
+  options: SyncOptions,
+): Promise<void> {
+  if (options.dryRun === true || options.yes !== true) {
+    deps.logger.info('Marca d’água NÃO avançou: execução foi simulação.');
+    return;
+  }
+  if (deps.syncState === undefined) return;
+
+  await deps.syncState.write({ version: 1, identifier, lastSyncedAt });
+  deps.logger.info(`Marca d’água avançada para ${lastSyncedAt}.`);
+}
+
+async function applyPlan(
+  deps: CommandDeps,
+  plan: MigrationPlan,
+  options: ApplyOptions,
+): Promise<number> {
   if (hasBlockingErrors(plan)) {
     // Mensagem própria em vez de deixar o MigrationBlockedError vazar: o
     // operador precisa saber ONDE ver o detalhe.
@@ -154,6 +231,7 @@ export async function runApply(deps: CommandDeps, options: ApplyOptions): Promis
     result = await executor.execute(plan, {
       dryRun,
       retry: toRetryPolicy(deps.config),
+      concurrency: deps.config.execution.concurrency,
       ...(progress === null
         ? {}
         : {
@@ -231,10 +309,12 @@ export async function runLedger(deps: CommandDeps, options: { json?: boolean }):
 
 async function preparePlan(
   deps: CommandDeps,
-  options: ArtifactOptions & { snapshot?: string },
+  options: ArtifactOptions & { snapshot?: string; since?: string },
 ): Promise<MigrationPlan> {
   const model =
-    options.snapshot === undefined ? await extractModel(deps) : await readSnapshot(options.snapshot);
+    options.snapshot === undefined
+      ? await extractModel(deps, options.since)
+      : await readSnapshot(options.snapshot);
 
   const projectKey = deps.config.target.projectKey;
   deps.logger.info(`Descobrindo capacidades do destino (${projectKey})…`);
@@ -245,8 +325,8 @@ async function preparePlan(
   });
 }
 
-async function extractModel(deps: CommandDeps): Promise<IssueModel> {
-  const options = toExtractOptions(deps.config);
+async function extractModel(deps: CommandDeps, since?: string): Promise<IssueModel> {
+  const options = toExtractOptions(deps.config, since);
   deps.logger.info(`Extraindo ${options.identifier} de ${deps.source.platformName}…`);
   const model = await deps.source.extract(options);
   deps.logger.info(`Extraídas ${formatNumber(model.issues.length)} issue(s).`);

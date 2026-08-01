@@ -213,7 +213,13 @@ export class FakeTargetAdapter implements TargetAdapter {
   /** Tamanho de cada anexo recebido — prova que o conteúdo chegou, não a URL. */
   readonly uploadedBytes: number[] = [];
 
+  /** Id de origem → promise que precisa resolver antes da criação terminar. */
+  readonly gates = new Map<string, Promise<void>>();
+  /** Pico de chamadas simultâneas observado — prova de paralelismo real. */
+  maxInFlight = 0;
+
   private counter = 0;
+  private inFlight = 0;
 
   authenticate(): Promise<void> {
     this.calls.push('authenticate:');
@@ -278,11 +284,26 @@ export class FakeTargetAdapter implements TargetAdapter {
     return Promise.resolve();
   }
 
-  private record(method: string, identifier: string): Promise<TargetItemRef> {
+  private async record(method: string, identifier: string): Promise<TargetItemRef> {
     this.calls.push(`${method}:${identifier}`);
+    this.inFlight += 1;
+    this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
+    try {
+      return await this.respond(method, identifier);
+    } finally {
+      this.inFlight -= 1;
+    }
+  }
+
+  private async respond(method: string, identifier: string): Promise<TargetItemRef> {
     // Aceita falhar por id de origem puro, mesmo quando o identificador
     // registrado carrega a referência resolvida (`<sourceId>@<targetId>`).
     const sourceId = identifier.split('@')[0] ?? identifier;
+
+    // Portão: segura esta chamada até o teste liberar, para observar o que roda
+    // em paralelo enquanto ela está pendente.
+    const gate = this.gates.get(sourceId) ?? this.gates.get(identifier);
+    if (gate !== undefined) await gate;
 
     const remaining = this.transientFailures.get(sourceId) ?? this.transientFailures.get(identifier);
     if (remaining !== undefined && remaining > 0) {

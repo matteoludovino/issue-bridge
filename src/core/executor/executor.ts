@@ -98,6 +98,12 @@ export interface ExecuteOptions {
    * inferir estado a partir de mensagens de log.
    */
   onProgress?: (progress: { done: number; total: number; failures: number }) => void;
+  /**
+   * Ações independentes executadas em paralelo. O padrão é 1 (sequencial, na
+   * ordem do plano) para que o comportamento de biblioteca seja determinístico;
+   * a CLI passa o valor da config.
+   */
+  concurrency?: number;
 }
 
 /** Lançado quando o plano tem findings `error`. Nada é executado. */
@@ -142,6 +148,17 @@ export function storeKeyFor(action: PlanAction): string {
   }
 }
 
+interface ScheduleContext {
+  plan: MigrationPlan;
+  result: ExecutionResult;
+  actionById: Map<string, PlanAction>;
+  resolved: Map<string, TargetItemRef>;
+  dryRun: boolean;
+  retry: RetryPolicy;
+  concurrency: number;
+  onProgress: ExecuteOptions['onProgress'];
+}
+
 /** Referências de destino já resolvidas para uma ação. */
 interface ResolvedDependencies {
   epicRef?: TargetItemRef;
@@ -181,84 +198,38 @@ export class Executor {
       dryRun,
     };
 
-    const actionById = new Map(plan.actions.map((action) => [action.id, action]));
-    /** Cache intra-execução: também é o único registro em dry-run. */
-    const resolved = new Map<string, TargetItemRef>();
+    const concurrency = Math.max(1, opts.concurrency ?? 1);
+    const planIndex = new Map(plan.actions.map((action, index) => [action.id, index]));
 
     this.logger.info('Iniciando execução do plano', {
       generatedAt: plan.generatedAt,
       actions: plan.actions.length,
+      concurrency,
       dryRun,
     });
 
-    for (const action of plan.actions) {
-      const key = storeKeyFor(action);
+    await this.schedule({
+      plan,
+      result,
+      actionById: new Map(plan.actions.map((action) => [action.id, action])),
+      // Cache intra-execução; em dry-run é o único registro, já que nada é gravado.
+      resolved: new Map<string, TargetItemRef>(),
+      dryRun,
+      retry,
+      concurrency,
+      onProgress: opts.onProgress,
+    });
 
-      const report = (): void => {
-        opts.onProgress?.({
-          done: result.succeeded.length + result.skipped.length + result.failed.length,
-          total: plan.actions.length,
-          failures: result.failed.length,
-        });
-      };
-
-      const existing = await this.store.get(key);
-      if (existing !== null) {
-        resolved.set(action.id, existing);
-        result.skipped.push({ action, reason: 'skipped_already_migrated', targetRef: existing });
-        this.logger.info('Ação já migrada, pulando', {
-          actionId: action.id,
-          targetRef: existing.humanRef,
-        });
-        report();
-        continue;
-      }
-
-      let attempts = 0;
-      try {
-        const dependencies = await this.resolveDependencies(action, actionById, resolved);
-
-        let targetRef: TargetItemRef | null;
-        if (dryRun) {
-          targetRef = simulateRef(action);
-        } else {
-          const attempt = await this.attemptDispatch(
-            action,
-            plan.targetProjectKey,
-            dependencies,
-            retry,
-          );
-          attempts = attempt.attempts;
-          if (!attempt.ok) throw attempt.error;
-          targetRef = attempt.targetRef;
-        }
-
-        if (targetRef !== null) {
-          resolved.set(action.id, targetRef);
-          if (!dryRun) await this.store.set(key, targetRef);
-        }
-
-        result.succeeded.push({ action, targetRef, attempts });
-        this.logger.info(dryRun ? 'Ação simulada' : 'Ação concluída', {
-          actionId: action.id,
-          kind: action.kind,
-          attempts,
-          targetRef: targetRef?.humanRef,
-        });
-      } catch (error: unknown) {
-        const normalized = normalizeError(error);
-        result.failed.push({ action, error: normalized, attempts: Math.max(attempts, 1) });
-        this.logger.error('Ação falhou', {
-          actionId: action.id,
-          kind: action.kind,
-          attempts: Math.max(attempts, 1),
-          code: normalized.code,
-          message: normalized.message,
-        });
-      }
-
-      report();
-    }
+    // Resultados voltam para a ordem do PLANO, não a de conclusão: relatório,
+    // diffs e testes precisam ser determinísticos mesmo com paralelismo.
+    const inPlanOrder = <T extends { action: PlanAction }>(items: T[]): T[] =>
+      [...items].sort(
+        (left, right) =>
+          (planIndex.get(left.action.id) ?? 0) - (planIndex.get(right.action.id) ?? 0),
+      );
+    result.succeeded = inPlanOrder(result.succeeded);
+    result.skipped = inPlanOrder(result.skipped);
+    result.failed = inPlanOrder(result.failed);
 
     result.finishedAt = new Date().toISOString();
     this.logger.info('Execução finalizada', {
@@ -267,6 +238,142 @@ export class Executor {
       failed: result.failed.length,
     });
     return result;
+  }
+
+  /**
+   * Escalonador com dependências.
+   *
+   * Uma ação entra em execução quando todo `dependsOn` já concluiu. Se alguma
+   * dependência falhou, a ação é marcada como falha na hora — sem gastar
+   * tentativa numa referência que nunca vai existir. Com `concurrency: 1` o
+   * comportamento é idêntico ao laço sequencial, na ordem do plano.
+   */
+  private async schedule(context: ScheduleContext): Promise<void> {
+    const { plan, result, concurrency } = context;
+    const status = new Map<string, 'ok' | 'fail'>();
+    const queue = [...plan.actions];
+    const inFlight = new Map<string, Promise<void>>();
+
+    const report = (): void => {
+      context.onProgress?.({
+        done: result.succeeded.length + result.skipped.length + result.failed.length,
+        total: plan.actions.length,
+        failures: result.failed.length,
+      });
+    };
+
+    const fail = (action: PlanAction, message: string): void => {
+      status.set(action.id, 'fail');
+      result.failed.push({
+        action,
+        error: { code: 'validation', message, retryable: false },
+        attempts: 1,
+      });
+      this.logger.error('Ação não executada', { actionId: action.id, message });
+      report();
+    };
+
+    while (queue.length > 0 || inFlight.size > 0) {
+      for (let index = 0; index < queue.length && inFlight.size < concurrency; ) {
+        const action = queue[index];
+        if (action === undefined) break;
+
+        const readiness = readinessOf(action, status);
+        if (readiness === 'waiting') {
+          index += 1;
+          continue;
+        }
+
+        // `splice` desloca a fila, então o índice não avança.
+        queue.splice(index, 1);
+
+        if (readiness === 'blocked') {
+          fail(action, `Dependência de "${action.id}" falhou; a ação foi descartada.`);
+          continue;
+        }
+
+        const promise = this.runAction(action, context).then((outcome) => {
+          status.set(action.id, outcome);
+          inFlight.delete(action.id);
+          report();
+        });
+        inFlight.set(action.id, promise);
+      }
+
+      if (inFlight.size === 0) {
+        if (queue.length === 0) break;
+        // Nada pronto e nada rodando: só acontece se `dependsOn` aponta para
+        // fora do plano. Falhar explicitamente é melhor que travar.
+        for (const action of queue) {
+          fail(action, `Ação "${action.id}" depende de algo que não existe no plano.`);
+        }
+        break;
+      }
+
+      await Promise.race(inFlight.values());
+    }
+  }
+
+  /** Corpo de uma ação: idempotência, dependências, escrita e registro. */
+  private async runAction(action: PlanAction, context: ScheduleContext): Promise<'ok' | 'fail'> {
+    const { plan, result, resolved, actionById, dryRun, retry } = context;
+    const key = storeKeyFor(action);
+
+    const existing = await this.store.get(key);
+    if (existing !== null) {
+      resolved.set(action.id, existing);
+      result.skipped.push({ action, reason: 'skipped_already_migrated', targetRef: existing });
+      this.logger.info('Ação já migrada, pulando', {
+        actionId: action.id,
+        targetRef: existing.humanRef,
+      });
+      return 'ok';
+    }
+
+    let attempts = 0;
+    try {
+      const dependencies = await this.resolveDependencies(action, actionById, resolved);
+
+      let targetRef: TargetItemRef | null;
+      if (dryRun) {
+        targetRef = simulateRef(action);
+      } else {
+        const attempt = await this.attemptDispatch(
+          action,
+          plan.targetProjectKey,
+          dependencies,
+          retry,
+        );
+        attempts = attempt.attempts;
+        if (!attempt.ok) throw attempt.error;
+        targetRef = attempt.targetRef;
+      }
+
+      if (targetRef !== null) {
+        resolved.set(action.id, targetRef);
+        if (!dryRun) await this.store.set(key, targetRef);
+      }
+
+      result.succeeded.push({ action, targetRef, attempts });
+      this.logger.info(dryRun ? 'Ação simulada' : 'Ação concluída', {
+        actionId: action.id,
+        kind: action.kind,
+        attempts,
+        targetRef: targetRef?.humanRef,
+      });
+      return 'ok';
+    } catch (error: unknown) {
+      const normalized = normalizeError(error);
+      result.failed.push({ action, error: normalized, attempts: Math.max(attempts, 1) });
+      this.logger.error('Ação falhou', {
+        actionId: action.id,
+        kind: action.kind,
+        attempts: Math.max(attempts, 1),
+        code: normalized.code,
+        message: normalized.message,
+      });
+      return 'fail';
+    }
   }
 
   /**
@@ -469,6 +576,21 @@ export class Executor {
       }
     }
   }
+}
+
+/** `waiting` = dependência ainda rodando; `blocked` = dependência falhou. */
+function readinessOf(
+  action: PlanAction,
+  status: Map<string, 'ok' | 'fail'>,
+): 'ready' | 'waiting' | 'blocked' {
+  if (isCatalog(action)) return 'ready';
+
+  for (const dependencyId of action.dependsOn) {
+    const state = status.get(dependencyId);
+    if (state === undefined) return 'waiting';
+    if (state === 'fail') return 'blocked';
+  }
+  return 'ready';
 }
 
 function isCatalog(

@@ -82,6 +82,11 @@ export class GitHubSourceAdapter implements SourceAdapter {
     if (options.labelFilter !== undefined && options.labelFilter.length > 0) {
       query.set('labels', options.labelFilter.join(','));
     }
+    // `since` do GitHub filtra por `updated_at`, exatamente a semântica de
+    // `updatedSince`: issue alterada volta inteira, com os comentários novos.
+    if (options.updatedSince !== undefined) {
+      query.set('since', options.updatedSince);
+    }
 
     const rawItems = await this.http.paginate(
       `/repos/${scope}/issues?${query.toString()}`,

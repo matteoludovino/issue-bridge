@@ -157,6 +157,26 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(issuesRequest).toContain('per_page=100');
   });
 
+  it('traduz updatedSince no filtro since da API (base do sync)', async () => {
+    client.json('/labels', []).json('/milestones', []).json('/issues?', []);
+
+    await adapterWith(client).extract({
+      identifier: 'acme/api',
+      updatedSince: '2026-03-01T00:00:00Z',
+    });
+
+    const issuesRequest = client.requests.find((url) => url.includes('/issues?'));
+    expect(issuesRequest).toContain('since=2026-03-01T00%3A00%3A00Z');
+  });
+
+  it('sem updatedSince não manda since, para não recortar o histórico', async () => {
+    client.json('/labels', []).json('/milestones', []).json('/issues?', []);
+
+    await adapterWith(client).extract({ identifier: 'acme/api' });
+
+    expect(client.requests.find((url) => url.includes('/issues?'))).not.toContain('since=');
+  });
+
   it('respeita maxItems como teto de itens lidos', async () => {
     client
       .json('/labels', [])

@@ -4,6 +4,14 @@ export interface ExtractOptions {
   /** Escopo a extrair, no formato da plataforma (`owner/repo`). */
   identifier: string;
   includeClosed?: boolean;
+  /**
+   * Extrai apenas itens alterados a partir deste instante (ISO 8601). É a base
+   * do `sync`: sem isso, cada execução relê o projeto inteiro.
+   *
+   * O filtro é por data de ALTERAÇÃO, então comentário novo em issue antiga vem
+   * junto com a issue-mãe.
+   */
+  updatedSince?: string;
   /** Extrai apenas issues que tenham ao menos um destes rótulos. */
   labelFilter?: string[];
   /** Teto de segurança para execuções exploratórias. */
