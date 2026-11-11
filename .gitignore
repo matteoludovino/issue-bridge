@@ -11,3 +11,6 @@ issue-bridge.yaml
 # Teams that share a ledger between operators should un-ignore ledger.json and
 # sync-state.json in a local exclude file rather than here.
 .issue-bridge/
+
+# Local tool settings
+.claude/
