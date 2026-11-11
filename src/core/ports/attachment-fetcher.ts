@@ -1,22 +1,22 @@
-/** Conteúdo de um anexo já materializado em memória. */
+/** Attachment content already materialized in memory. */
 export interface AttachmentPayload {
   filename: string;
-  /** MIME resolvido; `application/octet-stream` quando a origem não informa. */
+  /** Resolved MIME type; `application/octet-stream` when the source does not provide one. */
   contentType: string;
   bytes: Uint8Array;
 }
 
 /**
- * Porta de leitura de anexo.
+ * Attachment read port.
  *
- * Existe porque anexo é o único dado que atravessa origem → destino como bytes:
- * a URL do GitHub exige o token do GitHub, e o adapter de destino não pode
- * conhecer a credencial da origem. O Executor baixa e entrega o conteúdo pronto,
- * mantendo os dois adapters ignorantes um do outro.
+ * Exists because attachments are the only data that crosses source → target as bytes:
+ * the GitHub URL requires the GitHub token, and the target adapter must not
+ * know the source's credential. The Executor downloads and hands over the ready content,
+ * keeping the two adapters unaware of each other.
  *
- * Consequência assumida: o anexo passa inteiro pela memória do processo. Para
- * arquivos muito grandes, a evolução natural é trocar `bytes` por um
- * `AsyncIterable<Uint8Array>` — a interface é o único ponto a mudar.
+ * Accepted trade-off: the whole attachment passes through process memory. For
+ * very large files, the natural evolution is to replace `bytes` with an
+ * `AsyncIterable<Uint8Array>` — the interface is the only thing that has to change.
  */
 export interface AttachmentFetcher {
   fetch(url: string, filename: string): Promise<AttachmentPayload>;

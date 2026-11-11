@@ -20,7 +20,7 @@ import { InMemoryRollbackStore } from './in-memory-rollback-store.js';
 
 const options = { generatedAt: '2026-02-01T12:00:00Z' };
 
-/** Épico + issue pai (com comentário e link) + subtask fechada (com anexo). */
+/** Epic + parent issue (with a comment and a link) + closed subtask (with an attachment). */
 function scenarioPlan(): MigrationPlan {
   const milestone = makeMilestone('m1', 'Sprint 1');
   const parent = makeIssue({
@@ -73,7 +73,7 @@ describe('Executor', () => {
     executor = new Executor(adapter, store, logger, fetcher, sleeper);
   });
 
-  it('recusa plano com findings de erro e não escreve nada', async () => {
+  it('rejects a plan with error findings and writes nothing', async () => {
     const plan = buildPlan(
       makeModel({ issues: [makeIssue({ id: '1', type: 'bug' })] }),
       makeCapabilities(),
@@ -95,7 +95,7 @@ describe('Executor', () => {
     expect(await store.list()).toEqual([]);
   });
 
-  it('executa na ordem do plano e persiste cada item criado', async () => {
+  it('runs in plan order and persists every created item', async () => {
     const plan = scenarioPlan();
     const result = await executor.execute(plan);
 
@@ -112,7 +112,7 @@ describe('Executor', () => {
       'transitionIssue',
     ]);
 
-    // Todo item criado tem correspondência no ledger.
+    // Every created item has an entry in the ledger.
     const entries = await store.list();
     expect(entries).toHaveLength(plan.actions.length);
     for (const action of plan.actions) {
@@ -120,19 +120,19 @@ describe('Executor', () => {
     }
   });
 
-  it('resolve dependências para as referências reais do destino', async () => {
+  it('resolves dependencies to the actual target references', async () => {
     const plan = scenarioPlan();
     await executor.execute(plan);
 
     const issueRef = await store.get('fake:acme/api:issue:1');
     expect(issueRef).not.toBeNull();
-    // O comentário foi criado apontando para a issue criada, não para o id de origem.
+    // The comment was created pointing at the created issue, not at the source id.
     expect(adapter.calls).toContain(
       `createComment:fake:acme/api:comment:c1@${String(issueRef?.id)}`,
     );
   });
 
-  it('é idempotente: pula o que já está no ledger e reaproveita a referência', async () => {
+  it('is idempotent: skips what is already in the ledger and reuses the reference', async () => {
     const existing = { id: 'ENG-99', humanRef: 'ENG-99' };
     store = new InMemoryRollbackStore([
       { sourceId: 'fake:acme/api:issue:1', targetRef: existing },
@@ -147,12 +147,12 @@ describe('Executor', () => {
     expect(result.skipped[0]?.action.id).toBe('issue:fake:acme/api:issue:1');
     expect(result.failed).toEqual([]);
 
-    // A issue #1 não foi recriada, mas seu comentário usou a referência do ledger.
+    // Issue #1 was not recreated, but its comment used the reference from the ledger.
     expect(adapter.calls).not.toContain('createIssue:fake:acme/api:issue:1');
     expect(adapter.calls).toContain('createComment:fake:acme/api:comment:c1@ENG-99');
   });
 
-  it('não confunde transição com criação da mesma issue (chaves distintas)', async () => {
+  it('does not confuse a transition with the creation of the same issue (distinct keys)', async () => {
     const plan = scenarioPlan();
     await executor.execute(plan);
 
@@ -161,14 +161,14 @@ describe('Executor', () => {
     expect(storeKeyFor(transition!)).not.toBe('fake:acme/api:issue:2');
     expect(methodsCalled(adapter)).toContain('transitionIssue');
 
-    // Segunda execução: tudo já está no ledger, nada é reescrito.
+    // Second run: everything is already in the ledger, nothing is rewritten.
     const rerun = await executor.execute(plan);
     expect(rerun.skipped).toHaveLength(plan.actions.length);
     expect(rerun.succeeded).toEqual([]);
     expect(methodsCalled(adapter).filter((method) => method === 'transitionIssue')).toHaveLength(1);
   });
 
-  it('dry-run percorre tudo sem chamar o destino nem gravar no ledger', async () => {
+  it('dry-run walks through everything without calling the target or writing to the ledger', async () => {
     const plan = scenarioPlan();
     const result = await executor.execute(plan, { dryRun: true });
 
@@ -180,8 +180,8 @@ describe('Executor', () => {
     expect(result.succeeded[0]?.targetRef?.id).toMatch(/^dry-run:/);
   });
 
-  it('isola falhas: um erro não impede as demais ações', async () => {
-    // Duas issues independentes, cada uma com um comentário.
+  it('isolates failures: one error does not stop the other actions', async () => {
+    // Two independent issues, each with one comment.
     const plan = buildPlan(
       makeModel({
         issues: [
@@ -199,12 +199,12 @@ describe('Executor', () => {
     const result = await executor.execute(plan);
 
     const failedIds = result.failed.map((failure) => failure.action.id);
-    // A issue #1 falhou e seu comentário ficou sem dependência resolvida...
+    // Issue #1 failed and its comment was left with an unresolved dependency...
     expect(failedIds).toEqual([
       'issue:fake:acme/api:issue:1',
       'comment:fake:acme/api:comment:c1',
     ]);
-    // ...mas a issue #2 e o comentário dela seguiram normalmente.
+    // ...but issue #2 and its comment went through normally.
     expect(result.succeeded.map((outcome) => outcome.action.id)).toEqual([
       'issue:fake:acme/api:issue:2',
       'comment:fake:acme/api:comment:c2',
@@ -212,40 +212,40 @@ describe('Executor', () => {
     expect(
       result.failed.find((failure) => failure.action.kind === 'create_issue')?.error,
     ).toMatchObject({ code: 'validation', retryable: false });
-    // Falha não-retentável: uma tentativa só, sem espera.
+    // Non-retryable failure: a single attempt, no wait.
     expect(sleeper.delays).toEqual([]);
-    // O dependente é bloqueado pelo escalonador, antes de qualquer chamada.
+    // The dependent is blocked by the scheduler, before any call.
     expect(
       result.failed.find((failure) => failure.action.kind === 'create_comment')?.error.message,
     ).toContain('A dependency of');
     expect(logger.errors).toHaveLength(2);
   });
 
-  it('interrompe a cadeia quando o pai falha, sem afetar issues independentes', async () => {
+  it('stops the chain when the parent fails, without affecting independent issues', async () => {
     const plan = scenarioPlan();
     adapter.failingSourceIds.add('fake:acme/api:issue:1');
 
     const result = await executor.execute(plan);
 
     const failedIds = result.failed.map((failure) => failure.action.id);
-    // Subtask, anexo, link e transição dependem da issue #1 que falhou.
+    // Subtask, attachment, link and transition depend on the failed issue #1.
     expect(failedIds).toEqual([
       'issue:fake:acme/api:issue:1',
       'issue:fake:acme/api:issue:2',
       'comment:fake:acme/api:comment:c1',
       'attachment:fake:acme/api:attachment:a1',
       'link:fake:acme/api:issue:1|relates_to|fake:acme/api:issue:2',
-      // O status de destino faz parte do id: é o que permite o `sync` aplicar
-      // uma nova transição na mesma issue.
+      // The target status is part of the id: that is what lets `sync` apply
+      // a new transition to the same issue.
       'transition:fake:acme/api:issue:2:Done',
     ]);
-    // O épico não dependia de nada e foi criado.
+    // The epic depended on nothing and was created.
     expect(result.succeeded.map((outcome) => outcome.action.id)).toEqual([
       'epic:fake:acme/api:milestone:m1',
     ]);
   });
 
-  it('baixa o anexo pela origem e entrega bytes ao destino', async () => {
+  it('downloads the attachment through the source and hands bytes to the target', async () => {
     const plan = scenarioPlan();
     await executor.execute(plan);
 
@@ -253,7 +253,7 @@ describe('Executor', () => {
     expect(adapter.uploadedBytes).toEqual([4]);
   });
 
-  it('sem AttachmentFetcher, só a ação de anexo falha', async () => {
+  it('without an AttachmentFetcher, only the attachment action fails', async () => {
     const semFetcher = new Executor(adapter, store, logger, undefined, sleeper);
     const plan = scenarioPlan();
 
@@ -264,9 +264,9 @@ describe('Executor', () => {
     expect(result.succeeded).toHaveLength(plan.actions.length - 1);
   });
 
-  it('retenta erro transitório com backoff exponencial e conclui', async () => {
+  it('retries a transient error with exponential backoff and completes', async () => {
     const plan = scenarioPlan();
-    // Duas falhas transitórias no épico antes de dar certo.
+    // Two transient failures on the epic before it succeeds.
     adapter.transientFailures.set('fake:acme/api:milestone:m1', 2);
 
     const result = await executor.execute(plan, {
@@ -276,11 +276,11 @@ describe('Executor', () => {
     expect(result.failed).toEqual([]);
     expect(sleeper.delays).toEqual([100, 200]);
     expect(result.succeeded[0]).toMatchObject({ attempts: 3 });
-    // As demais ações não gastaram tentativa extra.
+    // The other actions did not spend any extra attempt.
     expect(result.succeeded[1]).toMatchObject({ attempts: 1 });
   });
 
-  it('respeita retryAfterMs do destino em vez do backoff calculado', async () => {
+  it('honors retryAfterMs from the target instead of the computed backoff', async () => {
     const plan = scenarioPlan();
     let calls = 0;
     const rateLimited = {
@@ -305,12 +305,12 @@ describe('Executor', () => {
       retry: { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 1_000 },
     });
 
-    // 61s > maxDelayMs, e ainda assim é respeitado: o servidor sabe melhor.
+    // 61s > maxDelayMs, and it is still honored: the server knows better.
     expect(sleeper.delays[0]).toBe(61_000);
     expect(result.succeeded[0]).toMatchObject({ attempts: 2 });
   });
 
-  it('desiste após maxAttempts e registra as tentativas gastas', async () => {
+  it('gives up after maxAttempts and records the attempts used', async () => {
     const plan = scenarioPlan();
     adapter.transientFailures.set('fake:acme/api:milestone:m1', 99);
 
@@ -320,11 +320,11 @@ describe('Executor', () => {
 
     const failedEpic = result.failed.find((failure) => failure.action.kind === 'create_epic');
     expect(failedEpic).toMatchObject({ attempts: 3, error: { code: 'transient' } });
-    // 3 tentativas = 2 esperas.
+    // 3 attempts = 2 waits.
     expect(sleeper.delays).toEqual([50, 100]);
 
-    // A issue #1 dependia do épico, então a cadeia toda cai — mas os dependentes
-    // falham na primeira tentativa, sem gastar retry em dependência inexistente.
+    // Issue #1 depended on the epic, so the whole chain fails — but the dependents
+    // fail on the first attempt, without spending retries on a missing dependency.
     expect(result.failed).toHaveLength(plan.actions.length);
     expect(
       result.failed
@@ -333,7 +333,7 @@ describe('Executor', () => {
     ).toBe(true);
   });
 
-  it('reporta progresso após cada ação, incluindo falhas acumuladas', async () => {
+  it('reports progress after each action, including accumulated failures', async () => {
     const plan = scenarioPlan();
     adapter.failingSourceIds.add('fake:acme/api:comment:c1');
     const events: string[] = [];
@@ -345,12 +345,12 @@ describe('Executor', () => {
 
     expect(events).toHaveLength(plan.actions.length);
     expect(events[0]).toBe('1/7:0');
-    // A 4ª ação é o comentário, que falha.
+    // The 4th action is the comment, which fails.
     expect(events[3]).toBe('4/7:1');
     expect(events.at(-1)).toBe('7/7:1');
   });
 
-  it('com concurrency 1 mantém a ordem exata do plano', async () => {
+  it('with concurrency 1 keeps the exact plan order', async () => {
     const plan = scenarioPlan();
     await executor.execute(plan, { concurrency: 1 });
 
@@ -366,9 +366,9 @@ describe('Executor', () => {
     expect(adapter.maxInFlight).toBe(1);
   });
 
-  it('executa ações independentes em paralelo, respeitando dependências', async () => {
-    // Duas issues irmãs, cada uma com comentário: os comentários dependem só da
-    // própria issue, então há trabalho genuinamente paralelizável.
+  it('runs independent actions in parallel while respecting dependencies', async () => {
+    // Two sibling issues, each with a comment: the comments depend only on
+    // their own issue, so there is genuinely parallelizable work.
     const plan = buildPlan(
       makeModel({
         issues: [
@@ -387,12 +387,12 @@ describe('Executor', () => {
 
     expect(result.failed).toEqual([]);
     expect(result.succeeded).toHaveLength(6);
-    // Prova de paralelismo: mais de uma chamada simultânea ao destino.
+    // Proof of parallelism: more than one concurrent call to the target.
     expect(adapter.maxInFlight).toBeGreaterThan(1);
     expect(adapter.maxInFlight).toBeLessThanOrEqual(3);
 
-    // Invariante que o paralelismo não pode violar: a issue existe antes do
-    // comentário dela.
+    // Invariant parallelism must not violate: the issue exists before its
+    // comment.
     for (const suffix of ['1', '2', '3']) {
       const issueAt = adapter.calls.findIndex((call) =>
         call.startsWith(`createIssue:fake:acme/api:issue:${suffix}`),
@@ -404,13 +404,13 @@ describe('Executor', () => {
       expect(commentAt).toBeGreaterThan(issueAt);
     }
 
-    // Resultado volta na ordem do plano, não na de conclusão.
+    // Results come back in plan order, not completion order.
     expect(result.succeeded.map((outcome) => outcome.action.id)).toEqual(
       plan.actions.map((action) => action.id),
     );
   });
 
-  it('não começa o dependente antes do pai terminar, mesmo com folga de concorrência', async () => {
+  it('does not start the dependent before the parent finishes, even with spare concurrency', async () => {
     const parent = makeIssue({ id: '1' });
     const child = makeIssue({ id: '2', parentSourceRef: parent.sourceRef, type: 'subtask' });
     const plan = buildPlan(
@@ -421,7 +421,7 @@ describe('Executor', () => {
       options,
     );
 
-    // Segura a criação do pai; o filho não pode aparecer nas chamadas enquanto isso.
+    // Hold the parent's creation; the child must not show up in the calls meanwhile.
     let release = (): void => {};
     adapter.gates.set(
       'fake:acme/api:issue:1',
@@ -431,8 +431,8 @@ describe('Executor', () => {
     );
 
     const execution = executor.execute(plan, { concurrency: 4 });
-    // Drena a fila de microtasks: o executor faz vários `await` (ledger,
-    // dependências) antes de chamar o destino.
+    // Drain the microtask queue: the executor does several `await`s (ledger,
+    // dependencies) before calling the target.
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(adapter.calls).toEqual(['createIssue:fake:acme/api:issue:1']);
 
@@ -446,7 +446,7 @@ describe('Executor', () => {
     ]);
   });
 
-  it('paralelismo não faz o dependente de uma falha gastar tentativa', async () => {
+  it('with parallelism, the dependent of a failure does not spend an attempt', async () => {
     const plan = buildPlan(
       makeModel({
         issues: [
@@ -471,11 +471,11 @@ describe('Executor', () => {
       'issue:fake:acme/api:issue:2',
       'comment:fake:acme/api:comment:c2',
     ]);
-    // O comentário órfão nunca chegou ao destino.
+    // The orphaned comment never reached the target.
     expect(adapter.calls.some((call) => call.includes('comment:c1'))).toBe(false);
   });
 
-  it('marca link no ledger mesmo quando o destino não devolve referência', async () => {
+  it('records the link in the ledger even when the target returns no reference', async () => {
     adapter.linkReturnsNull = true;
     const plan = scenarioPlan();
     await executor.execute(plan);

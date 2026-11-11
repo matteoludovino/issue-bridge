@@ -1,16 +1,16 @@
 import type { IssuePriority, IssueStatus, IssueType } from '../../core/models/common.js';
 
 /**
- * O GitHub não tem tipo nem prioridade — só labels. Esta classificação traduz
- * labels em valores neutros do `IssueModel`.
+ * GitHub has no type or priority — only labels. This classification maps
+ * labels to neutral `IssueModel` values.
  *
- * É configuração DO ADAPTER, não do Planner: o Planner traduz neutro → destino,
- * o adapter traduz origem → neutro. Todas as chaves são comparadas em minúsculas.
+ * It is ADAPTER configuration, not Planner configuration: the Planner maps neutral → target,
+ * the adapter maps source → neutral. All keys are compared in lowercase.
  */
 export interface LabelClassification {
   typeByLabel: Record<string, IssueType>;
   priorityByLabel: Record<string, IssuePriority>;
-  /** Labels que indicam trabalho em andamento (issue aberta → `in_progress`). */
+  /** Labels that indicate work in progress (open issue → `in_progress`). */
   inProgressLabels: string[];
   defaultType: IssueType;
 }
@@ -48,10 +48,10 @@ export const DEFAULT_LABEL_CLASSIFICATION: LabelClassification = {
   defaultType: 'task',
 };
 
-/** Precedência quando a issue tem mais de uma label de tipo. */
+/** Precedence when an issue has more than one type label. */
 const TYPE_PRECEDENCE: readonly IssueType[] = ['epic', 'subtask', 'bug', 'story', 'task'];
 
-/** Da mais alta para a mais baixa: labels conflitantes resolvem pela maior. */
+/** Highest to lowest: conflicting labels resolve to the highest. */
 const PRIORITY_PRECEDENCE: readonly IssuePriority[] = [
   'highest',
   'high',
@@ -82,8 +82,8 @@ export function classifyPriority(
 }
 
 /**
- * `closed` sempre vence. Issue aberta com label de andamento vira
- * `in_progress` — é o que permite o Planner gerar a transição no destino.
+ * `closed` always wins. An open issue with an in-progress label becomes
+ * `in_progress` — this is what lets the Planner generate the transition in the target.
  */
 export function classifyStatus(
   state: 'open' | 'closed',

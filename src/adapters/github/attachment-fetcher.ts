@@ -4,10 +4,10 @@ import { FetchHttpClient, type HttpClient } from '../http.js';
 import { GitHubHttp, type GitHubHttpOptions } from './http.js';
 
 /**
- * Baixa anexos do GitHub com a credencial da ORIGEM.
+ * Downloads GitHub attachments using the SOURCE credentials.
  *
- * Em repositório privado as URLs de `user-attachments`/`user-images` exigem
- * autenticação; sem isso o destino receberia HTML de login em vez do arquivo.
+ * In a private repository, `user-attachments`/`user-images` URLs require
+ * authentication; without it the target would receive a login HTML page instead of the file.
  */
 export class GitHubAttachmentFetcher implements AttachmentFetcher {
   private readonly http: GitHubHttp;

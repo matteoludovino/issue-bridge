@@ -48,7 +48,7 @@ const model = makeModel({
   ],
 });
 
-describe('comandos da CLI', () => {
+describe('CLI commands', () => {
   let outDir: string;
   let source: FakeSourceAdapter;
   let target: FakeTargetAdapter;
@@ -80,23 +80,23 @@ describe('comandos da CLI', () => {
     await rm(outDir, { recursive: true, force: true });
   });
 
-  it('login valida as duas credenciais', async () => {
+  it('login validates both credentials', async () => {
     expect(await runLogin(deps)).toBe(EXIT.ok);
     expect(source.authenticated).toBe(true);
     expect(target.calls).toContain('authenticate:');
   });
 
-  it('export grava o snapshot e não toca no destino', async () => {
+  it('export writes the snapshot without touching the target', async () => {
     expect(await runExport(deps, { outDir })).toBe(EXIT.ok);
 
     const snapshot: unknown = JSON.parse(await readFile(join(outDir, 'snapshot.json'), 'utf8'));
     expect(snapshot).toMatchObject({ issues: [{ title: 'Issue 1' }, { title: 'Issue 2' }] });
     expect(target.calls).toEqual([]);
-    // Opções de extração vêm da config.
+    // Extraction options come from the config.
     expect(source.extractCalls[0]).toEqual({ identifier: 'acme/api', includeClosed: true });
   });
 
-  it('analyze grava plano e relatório e sai 0 quando o plano é válido', async () => {
+  it('analyze writes the plan and report and exits 0 when the plan is valid', async () => {
     expect(await runAnalyze(deps, { outDir })).toBe(EXIT.ok);
 
     const plan: unknown = JSON.parse(await readFile(join(outDir, 'plan.json'), 'utf8'));
@@ -104,11 +104,11 @@ describe('comandos da CLI', () => {
 
     const report = await readFile(join(outDir, 'migration-report.md'), 'utf8');
     expect(report).toContain('Plan is valid');
-    // Nada foi escrito no destino, só descoberta de capacidades.
+    // Nothing was written to the target, only capability discovery.
     expect(target.calls).toEqual(['discoverCapabilities:ENG']);
   });
 
-  it('analyze sai 1 quando há erro bloqueante, servindo de gate em CI', async () => {
+  it('analyze exits 1 on a blocking error, so it works as a CI gate', async () => {
     const strictTarget = new FakeTargetAdapter();
     strictTarget.discoverCapabilities = () =>
       Promise.resolve({
@@ -131,7 +131,7 @@ describe('comandos da CLI', () => {
     expect(logger.errors.join(' ')).toContain('block apply');
   });
 
-  it('analyze reaproveita snapshot em disco sem chamar a origem', async () => {
+  it('analyze reuses the snapshot on disk without calling the source', async () => {
     await runExport(deps, { outDir });
     const fresh = new FakeSourceAdapter(model);
 
@@ -143,12 +143,12 @@ describe('comandos da CLI', () => {
     expect(fresh.extractCalls).toEqual([]);
   });
 
-  it('apply sem --yes roda em simulação e avisa', async () => {
+  it('apply without --yes runs as a dry run and warns', async () => {
     const code = await runApply(deps, { outDir });
 
     expect(code).toBe(EXIT.ok);
     expect(logger.warns.join(' ')).toContain('SIMULATION');
-    // Nenhuma escrita além da descoberta de capacidades.
+    // No writes beyond capability discovery.
     expect(target.calls).toEqual(['discoverCapabilities:ENG']);
 
     const execution: unknown = JSON.parse(await readFile(join(outDir, 'execution.json'), 'utf8'));
@@ -156,7 +156,7 @@ describe('comandos da CLI', () => {
     expect(await readFile(join(outDir, 'migration-report.md'), 'utf8')).toContain('simulation');
   });
 
-  it('apply com --yes escreve no destino e grava o relatório da execução', async () => {
+  it('apply with --yes writes to the target and saves the execution report', async () => {
     const code = await runApply(deps, { outDir, yes: true });
 
     expect(code).toBe(EXIT.ok);
@@ -168,7 +168,7 @@ describe('comandos da CLI', () => {
     expect(report).toContain('## Source → target mapping');
   });
 
-  it('apply sai 1 quando alguma ação falha, e o relatório mostra o motivo', async () => {
+  it('apply exits 1 when any action fails, and the report shows why', async () => {
     target.failingSourceIds.add('fake:acme/api:issue:2');
 
     const code = await runApply(deps, { outDir, yes: true });
@@ -180,7 +180,7 @@ describe('comandos da CLI', () => {
     expect(logger.errors.join(' ')).toContain('Re-running is safe');
   });
 
-  it('apply reutiliza um plano já gerado, sem reextrair', async () => {
+  it('apply reuses an existing plan without re-extracting', async () => {
     await runAnalyze(deps, { outDir });
     const fresh = new FakeSourceAdapter(model);
 
@@ -193,7 +193,7 @@ describe('comandos da CLI', () => {
     expect(fresh.extractCalls).toEqual([]);
   });
 
-  it('report regera do plano antes do apply e da execução depois', async () => {
+  it('report regenerates from the plan before apply and from the execution after', async () => {
     await runAnalyze(deps, { outDir });
 
     const planOnly = join(outDir, 'plan-report.md');
@@ -206,12 +206,12 @@ describe('comandos da CLI', () => {
     expect(await readFile(afterApply, 'utf8')).toContain('— execution');
   });
 
-  describe('sync incremental', () => {
-    it('primeira execução lê tudo e avança a marca d’água', async () => {
+  describe('incremental sync', () => {
+    it('first run reads everything and advances the watermark', async () => {
       const code = await runSync(deps, { outDir, yes: true });
 
       expect(code).toBe(EXIT.ok);
-      // Sem marca anterior: extração sem filtro de data.
+      // No previous watermark: extraction without a date filter.
       expect(source.extractCalls[0]?.updatedSince).toBeUndefined();
       expect(await deps.syncState?.read('acme/api')).toEqual({
         version: 1,
@@ -220,7 +220,7 @@ describe('comandos da CLI', () => {
       });
     });
 
-    it('segunda execução filtra pela marca e não reescreve nada', async () => {
+    it('second run filters by the watermark and rewrites nothing', async () => {
       await runSync(deps, { outDir, yes: true });
       const postsAfterFirst = target.calls.length;
 
@@ -229,12 +229,12 @@ describe('comandos da CLI', () => {
 
       expect(code).toBe(EXIT.ok);
       expect(second.extractCalls[0]?.updatedSince).toBe('2026-03-01T00:00:00Z');
-      // Idempotência: mesmo relendo os mesmos itens, nada novo é criado.
-      expect(target.calls.length).toBe(postsAfterFirst + 1); // só discoverCapabilities
+      // Idempotency: even when re-reading the same items, nothing new is created.
+      expect(target.calls.length).toBe(postsAfterFirst + 1); // only discoverCapabilities
       expect(target.calls.at(-1)).toBe('discoverCapabilities:ENG');
     });
 
-    it('--full ignora a marca e relê a origem inteira', async () => {
+    it('--full ignores the watermark and re-reads the whole source', async () => {
       await runSync(deps, { outDir, yes: true });
 
       const second = new FakeSourceAdapter(model);
@@ -243,7 +243,7 @@ describe('comandos da CLI', () => {
       expect(second.extractCalls[0]?.updatedSince).toBeUndefined();
     });
 
-    it('--since sobrescreve a marca gravada', async () => {
+    it('--since overrides the stored watermark', async () => {
       await runSync(deps, { outDir, yes: true });
 
       const second = new FakeSourceAdapter(model);
@@ -255,16 +255,16 @@ describe('comandos da CLI', () => {
       expect(second.extractCalls[0]?.updatedSince).toBe('2025-01-01T00:00:00Z');
     });
 
-    it('simulação NÃO avança a marca', async () => {
+    it('a dry run does NOT advance the watermark', async () => {
       const code = await runSync(deps, { outDir });
 
       expect(code).toBe(EXIT.ok);
       expect(logger.warns.join(' ')).toContain('SIMULATION');
-      // Avançar aqui esconderia itens que nunca chegaram ao destino.
+      // Advancing here would hide items that never reached the target.
       expect(await deps.syncState?.read('acme/api')).toBeNull();
     });
 
-    it('falha NÃO avança a marca', async () => {
+    it('a failure does NOT advance the watermark', async () => {
       target.failingSourceIds.add('fake:acme/api:issue:1');
 
       const code = await runSync(deps, { outDir, yes: true });
@@ -273,7 +273,7 @@ describe('comandos da CLI', () => {
       expect(await deps.syncState?.read('acme/api')).toBeNull();
     });
 
-    it('origem sem novidade avança a marca sem escrever nada', async () => {
+    it('a source with nothing new advances the watermark without writing anything', async () => {
       const vazia = new FakeSourceAdapter(makeModel({ issues: [] }));
 
       const code = await runSync({ ...deps, source: vazia }, { outDir, yes: true });
@@ -285,7 +285,7 @@ describe('comandos da CLI', () => {
     });
   });
 
-  it('ledger lista as correspondências e suporta JSON no stdout', async () => {
+  it('ledger lists the mappings and supports JSON on stdout', async () => {
     await runApply(deps, { outDir, yes: true });
 
     expect(await runLedger(deps, {})).toBe(EXIT.ok);
@@ -297,7 +297,7 @@ describe('comandos da CLI', () => {
     expect(Array.isArray(parsed)).toBe(true);
   });
 
-  it('ledger vazio diz que está vazio, em vez de sair em silêncio', async () => {
+  it('an empty ledger says it is empty instead of exiting silently', async () => {
     expect(await runLedger(deps, {})).toBe(EXIT.ok);
     expect(stdout.join('')).toContain('ledger is empty');
   });

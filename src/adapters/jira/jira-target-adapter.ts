@@ -37,17 +37,17 @@ import {
 import { z } from 'zod';
 
 export interface JiraTargetAdapterOptions extends JiraHttpOptions {
-  /** Injete nos testes; em produção usa o `fetch` global. */
+  /** Inject in tests; production uses the global `fetch`. */
   httpClient?: HttpClient;
-  /** Nome do tipo de issue usado para épicos neste projeto. */
+  /** Name of the issue type used for epics in this project. */
   epicIssueTypeName?: string;
-  /** Tipo canônico de link → nome do tipo de link no Jira. */
+  /** Canonical link type → Jira link type name. */
   linkTypeNames?: Partial<Record<LinkType, string>>;
-  /** Recebe avisos de degradação (ex.: assignee sem correspondente). */
+  /** Receives degradation warnings (e.g. an assignee with no match). */
   logger?: Logger;
 }
 
-/** Nomes padrão dos tipos de link no Jira. */
+/** Default Jira link type names. */
 const DEFAULT_LINK_TYPE_NAMES: Record<LinkType, string> = {
   blocks: 'Blocks',
   blocked_by: 'Blocks',
@@ -58,18 +58,18 @@ const DEFAULT_LINK_TYPE_NAMES: Record<LinkType, string> = {
   child_of: 'Relates',
 };
 
-/** Limite de `summary` no Jira. */
+/** Jira's length limit for `summary`. */
 const MAX_SUMMARY_LENGTH = 255;
 
 /**
- * Implementa `TargetAdapter` sobre a REST v3 do Jira Cloud, sem SDK.
+ * Implements `TargetAdapter` on top of Jira Cloud REST v3, without an SDK.
  *
- * Decisões estruturais:
- *  - `createLabel` é no-op: label no Jira é string livre na issue, não entidade.
- *  - Épico é uma issue do tipo configurado em `epicIssueTypeName`; a associação
- *    acontece pelo campo `parent`, como no modelo de hierarquia atual do Jira.
- *  - `workflow.transitions` das capabilities é OTIMISTA (ver `discoverCapabilities`).
- *  - Nenhuma escrita faz retry: política de retry é do Executor.
+ * Structural decisions:
+ *  - `createLabel` is a no-op: a Jira label is a free-form string on the issue, not an entity.
+ *  - An epic is an issue of the type configured in `epicIssueTypeName`; the association
+ *    goes through the `parent` field, as in Jira's current hierarchy model.
+ *  - The capabilities' `workflow.transitions` is OPTIMISTIC (see `discoverCapabilities`).
+ *  - No write is retried: retry policy belongs to the Executor.
  */
 export class JiraTargetAdapter implements TargetAdapter {
   readonly platformName = 'jira';
@@ -77,7 +77,7 @@ export class JiraTargetAdapter implements TargetAdapter {
   private readonly http: JiraHttp;
   private readonly baseUrl: string;
   private readonly epicIssueTypeName: string;
-  /** Aceita chave `string` porque `CreateLinkInput.linkType` é string no port. */
+  /** Accepts `string` keys because `CreateLinkInput.linkType` is a string in the port. */
   private readonly linkTypeNames: Record<string, string>;
   private readonly logger: Logger | undefined;
   private readonly accountIdCache = new Map<string, string | null>();
@@ -97,15 +97,15 @@ export class JiraTargetAdapter implements TargetAdapter {
   }
 
   /**
-   * Monta o retrato do projeto de destino.
+   * Builds a snapshot of the target project.
    *
-   * Ponto de atenção: a REST do Jira Cloud NÃO expõe o grafo de transições sem
-   * uma issue existente (transições são consultadas por issue). Portanto
-   * `workflow.transitions` é otimista — todo status é declarado alcançável a
-   * partir de qualquer outro. A validação real acontece em `transitionIssue`,
-   * que lista as transições da issue e falha com a lista disponível se o status
-   * pedido não estiver lá. Sem isso, o Planner emitiria `unreachable_status`
-   * para toda issue não-inicial.
+   * Caveat: the Jira Cloud REST API does NOT expose the transition graph without
+   * an existing issue (transitions are queried per issue). Therefore
+   * `workflow.transitions` is optimistic — every status is declared reachable
+   * from any other. The real validation happens in `transitionIssue`,
+   * which lists the issue's transitions and fails with the available list if the
+   * requested status is not there. Without this, the Planner would emit `unreachable_status`
+   * for every issue not in the initial status.
    */
   async discoverCapabilities(projectKey: string): Promise<TargetCapabilities> {
     const project = await this.http.get(
@@ -148,8 +148,8 @@ export class JiraTargetAdapter implements TargetAdapter {
       JiraProjectStatusesSchema,
     );
 
-    // Ordem preservada: o primeiro status do primeiro tipo é o status inicial,
-    // e o Planner usa `statuses[0]` exatamente com esse significado.
+    // Order preserved: the first status of the first type is the initial status,
+    // and the Planner uses `statuses[0]` with exactly that meaning.
     const statuses: string[] = [];
     for (const type of statusesByType) {
       for (const status of type.statuses) {
@@ -162,8 +162,8 @@ export class JiraTargetAdapter implements TargetAdapter {
       transitions[status] = statuses.filter((candidate) => candidate !== status);
     }
 
-    // Lista global de labels; alguns projetos negam acesso — degradar é melhor
-    // que falhar a descoberta inteira.
+    // Global label list; some projects deny access — degrading is better
+    // than failing the whole discovery.
     const labels = await this.tryOr(
       async () =>
         (await this.http.get('/rest/api/3/label?maxResults=1000', JiraLabelsSchema)).values,
@@ -208,7 +208,7 @@ export class JiraTargetAdapter implements TargetAdapter {
     return issue === undefined ? null : this.issueRef(issue.id, issue.key);
   }
 
-  /** Épico é uma issue do tipo `epicIssueTypeName`; não há endpoint dedicado. */
+  /** An epic is an issue of type `epicIssueTypeName`; there is no dedicated endpoint. */
   createEpic(input: CreateEpicInput): Promise<TargetItemRef> {
     return this.createIssue({
       projectKey: input.projectKey,
@@ -230,7 +230,7 @@ export class JiraTargetAdapter implements TargetAdapter {
         name: input.name,
         projectId: Number(projectId),
         ...(input.description === undefined ? {} : { description: input.description }),
-        // O Jira aceita apenas `YYYY-MM-DD` aqui.
+        // Jira only accepts `YYYY-MM-DD` here.
         ...(input.releaseDate === undefined
           ? {}
           : { releaseDate: input.releaseDate.slice(0, 10) }),
@@ -254,8 +254,8 @@ export class JiraTargetAdapter implements TargetAdapter {
   }
 
   /**
-   * No-op deliberado: no Jira, label é string livre gravada na issue — não existe
-   * entidade a criar. A referência devolvida serve apenas para o ledger.
+   * Deliberate no-op: in Jira a label is a free-form string stored on the issue — there
+   * is no entity to create. The returned reference only serves the ledger.
    */
   createLabel(input: CreateLabelInput): Promise<TargetItemRef> {
     return Promise.resolve({ id: input.name, humanRef: input.name });
@@ -273,15 +273,15 @@ export class JiraTargetAdapter implements TargetAdapter {
     if (input.labels.length > 0) fields['labels'] = input.labels.map(sanitizeLabel);
     if (input.versionRef !== undefined) fields['fixVersions'] = [{ id: input.versionRef.id }];
 
-    // O Jira tem UM campo `parent`. Hierarquia direta ganha do épico; o Planner
-    // já evita mandar os dois (ver `buildPlan`).
+    // Jira has ONE `parent` field. A direct parent wins over the epic; the Planner
+    // already avoids sending both (see `buildPlan`).
     const parent = input.parentRef ?? input.epicRef;
     if (parent !== undefined) fields['parent'] = { id: parent.id };
 
     const assigneeId = await this.resolveAssignee(input.assignees);
     if (assigneeId !== null) fields['assignee'] = { id: assigneeId };
 
-    // Custom fields do plano por último: podem sobrescrever qualquer default.
+    // The plan's custom fields go last: they may override any default.
     Object.assign(fields, input.fields);
 
     const created = await this.http.post('/rest/api/3/issue', { fields }, JiraCreatedIssueSchema);
@@ -320,14 +320,14 @@ export class JiraTargetAdapter implements TargetAdapter {
   }
 
   /**
-   * `POST /issueLink` responde 201 sem corpo, então não há referência a devolver
-   * — o Executor grava um marcador próprio no ledger.
+   * `POST /issueLink` responds 201 with no body, so there is no reference to return
+   * — the Executor records its own marker in the ledger.
    */
   async createLink(input: CreateLinkInput): Promise<TargetItemRef | null> {
     await this.http.postVoid('/rest/api/3/issueLink', {
       type: { name: this.linkTypeNames[input.linkType] ?? 'Relates' },
-      // No vocabulário do Jira, `outwardIssue` é o lado ativo ("blocks",
-      // "duplicates") e `inwardIssue` o lado passivo.
+      // In Jira's vocabulary, `outwardIssue` is the active side ("blocks",
+      // "duplicates") and `inwardIssue` the passive side.
       outwardIssue: { id: input.fromRef.id },
       inwardIssue: { id: input.toRef.id },
     });
@@ -335,10 +335,10 @@ export class JiraTargetAdapter implements TargetAdapter {
   }
 
   /**
-   * Uma transição por chamada (sem caminho multi-passo). Se o status pedido não
-   * estiver disponível, a mensagem lista as opções reais da issue — é o
-   * diagnóstico que o `analyze` não consegue dar, porque o workflow não é
-   * introspectável sem issue.
+   * One transition per call (no multi-step path). If the requested status is not
+   * available, the message lists the issue's actual options — the diagnosis
+   * that `analyze` cannot provide, because the workflow cannot be introspected
+   * without an issue.
    */
   async transitionIssue(issueRef: TargetItemRef, targetStatus: string): Promise<void> {
     const available = await this.http.get(
@@ -380,7 +380,7 @@ export class JiraTargetAdapter implements TargetAdapter {
     return project.id;
   }
 
-  /** Primeiro assignee resolvível. O Jira aceita um único assignee por issue. */
+  /** First resolvable assignee. Jira accepts a single assignee per issue. */
   private async resolveAssignee(assignees: string[]): Promise<string | null> {
     for (const identifier of assignees) {
       const accountId = await this.resolveAccountId(identifier);
@@ -416,7 +416,7 @@ export class JiraTargetAdapter implements TargetAdapter {
     return accountId;
   }
 
-  /** Degrada em vez de derrubar a operação inteira, registrando o motivo. */
+  /** Degrades instead of failing the whole operation, logging the reason. */
   private async tryOr<T>(operation: () => Promise<T>, fallback: T, warning: string): Promise<T> {
     try {
       return await operation();
@@ -429,7 +429,7 @@ export class JiraTargetAdapter implements TargetAdapter {
   }
 }
 
-/** Label do Jira não aceita espaço. */
+/** Jira labels do not accept spaces. */
 function sanitizeLabel(label: string): string {
   return label.trim().replace(/\s+/g, '-');
 }
@@ -442,7 +442,7 @@ function escapeJql(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-/** accountId da Atlassian: 24 hex, ou `<siteId>:<uuid>` para contas novas. */
+/** Atlassian accountId: 24 hex chars, or `<siteId>:<uuid>` for newer accounts. */
 function looksLikeAccountId(value: string): boolean {
   return /^[0-9a-f]{24}$/i.test(value) || /^\d{5,7}:[0-9a-f-]{36}$/i.test(value);
 }

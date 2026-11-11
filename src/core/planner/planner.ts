@@ -24,13 +24,13 @@ import { resolveFieldsFor, type MappingConfig } from './mapping-config.js';
 
 export interface BuildPlanOptions {
   /**
-   * Timestamp gravado em `generatedAt`. Informe nos testes para que `buildPlan`
-   * seja 100% determinística; omitido, usa o relógio do sistema.
+   * Timestamp written to `generatedAt`. Pass it in tests so that `buildPlan` is
+   * 100% deterministic; when omitted, the system clock is used.
    */
   generatedAt?: string;
 }
 
-/** Ids de ação determinísticos: o mesmo modelo produz sempre o mesmo plano. */
+/** Deterministic action ids: the same model always produces the same plan. */
 const actionId = {
   epic: (milestoneRefId: string) => `epic:${milestoneRefId}`,
   version: (milestoneRefId: string) => `version:${milestoneRefId}`,
@@ -40,31 +40,32 @@ const actionId = {
   attachment: (attachmentRefId: string) => `attachment:${attachmentRefId}`,
   link: (from: string, type: LinkType, to: string) => `link:${from}|${type}|${to}`,
   /**
-   * O status de destino faz parte do id — e portanto da chave de idempotência.
-   * Sem isso, uma issue que mudou de status na origem depois da primeira
-   * migração teria a transição pulada para sempre no `sync`.
+   * The target status is part of the id — and therefore of the idempotency key.
+   * Without it, an issue whose status changed in the source after the first
+   * migration would have its transition skipped forever on `sync`.
    */
   transition: (issueRefId: string, targetStatus: string) =>
     `transition:${issueRefId}:${targetStatus}`,
 };
 
 /**
- * Campos que o Planner sempre preenche ao criar uma issue. Comparados de forma
- * normalizada contra `capabilities.requiredFieldsByIssueType`, que pode usar
- * nomes ou ids (`Summary`, `summary`, `issueType`).
+ * Fields the Planner always fills when creating an issue. Compared in
+ * normalized form against `capabilities.requiredFieldsByIssueType`, which may use
+ * names or ids (`Summary`, `summary`, `issueType`).
  */
 const ALWAYS_PROVIDED_FIELDS = ['project', 'issuetype', 'summary', 'description'];
 
 const normalizeFieldId = (raw: string): string => raw.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /**
- * Constrói o plano de migração. Função PURA: sem rede, sem fs, sem console.
+ * Builds the migration plan. PURE function: no network, no fs, no console.
  *
- * O que ela NÃO faz de propósito:
- *  - não gera `create_component`: nenhum conceito do `IssueModel` mapeia para
- *    componente do destino (viria da config, em fase futura);
- *  - não preenche custom fields: `MappingConfig` não os expõe, então campos
- *    obrigatórios customizados aparecem como `missing_required_field`.
+ * What it deliberately does NOT do:
+ *  - it does not emit `create_component`: no `IssueModel` concept maps to a
+ *    target component (that would come from the config, in a future phase);
+ *  - it does not invent custom field values: they come only from
+ *    `mappings.fields` (defaults, then per issue type), so a required field
+ *    with no configured value shows up as `missing_required_field`.
  */
 export function buildPlan(
   model: IssueModel,
@@ -76,11 +77,11 @@ export function buildPlan(
   const findings: PlanFinding[] = [];
   const issueByRefId = new Map(model.issues.map((issue) => [issue.sourceRef.id, issue]));
 
-  // Config de campos é validada UMA vez contra o destino — por issue geraria
-  // o mesmo aviso centenas de vezes.
+  // The field config is validated ONCE against the target — doing it per issue
+  // would emit the same warning hundreds of times.
   validateConfiguredFields(config, capabilities, findings);
 
-  // ─── 1. Milestones → épicos ou versões ────────────────────────────────────
+  // ─── 1. Milestones → epics or versions ────────────────────────────────────
   const catalogActions: PlanAction[] = [];
   const milestoneActionByRefId = new Map<string, string>();
   const epicIssueType = config.issueTypes.epic;
@@ -99,8 +100,8 @@ export function buildPlan(
       catalogActions.push(epic);
       milestoneActionByRefId.set(milestone.sourceRef.id, epic.id);
 
-      // Épico é criado como issue no destino, então está sujeito às mesmas
-      // exigências de campo obrigatório — validar aqui evita 400 no `apply`.
+      // An epic is created as an issue in the target, so it is subject to the same
+      // required-field rules — validating here avoids a 400 during `apply`.
       if (!capabilities.issueTypes.includes(epicIssueType)) {
         findings.push({
           severity: 'error',
@@ -141,7 +142,7 @@ export function buildPlan(
     }
   }
 
-  // ─── Labels ausentes no destino ───────────────────────────────────────────
+  // ─── Labels missing in the target ─────────────────────────────────────────
   for (const label of model.labels) {
     if (capabilities.labels.includes(label.name)) continue;
     const action: CreateLabelAction = {
@@ -152,8 +153,8 @@ export function buildPlan(
     catalogActions.push(action);
   }
 
-  // ─── 5. Ciclos ────────────────────────────────────────────────────────────
-  // Hierarquia define ordem de criação: ciclo aqui é fatal.
+  // ─── 5. Cycles ────────────────────────────────────────────────────────────
+  // Hierarchy defines creation order: a cycle here is fatal.
   const hierarchy: DirectedGraph = new Map();
   for (const issue of model.issues) {
     const id = issue.sourceRef.id;
@@ -183,8 +184,8 @@ export function buildPlan(
     }
   }
 
-  // Bloqueios NÃO afetam a ordem (links são criados depois de todas as issues),
-  // então um ciclo aqui é apenas aviso — remover issues seria perda de dado.
+  // Blocking links do NOT affect the order (links are created after all issues),
+  // so a cycle here is only a warning — dropping issues would lose data.
   const blocking: DirectedGraph = new Map();
   for (const issue of model.issues) {
     for (const link of issue.links) {
@@ -203,7 +204,7 @@ export function buildPlan(
     });
   }
 
-  // ─── 2. Tipos inválidos derrubam a issue antes de qualquer outra decisão ──
+  // ─── 2. Invalid types drop the issue before any other decision ────────────
   for (const issue of model.issues) {
     if (droppedIssueIds.has(issue.sourceRef.id)) continue;
     const targetType = config.issueTypes[issue.type];
@@ -217,7 +218,7 @@ export function buildPlan(
     });
   }
 
-  // ─── Ações por issue ──────────────────────────────────────────────────────
+  // ─── Per-issue actions ────────────────────────────────────────────────────
   const issueActions: CreateIssueAction[] = [];
   const commentActions: CreateCommentAction[] = [];
   const attachmentActions: CreateAttachmentAction[] = [];
@@ -244,8 +245,8 @@ export function buildPlan(
     const versionActionId = config.milestoneStrategy === 'version' ? milestoneActionId : undefined;
     let epicActionId = config.milestoneStrategy === 'epic' ? milestoneActionId : undefined;
 
-    // Destinos com um único campo de hierarquia (o `parent` do Jira) não aceitam
-    // pai direto E épico. O pai direto prevalece: é a relação mais específica.
+    // Targets with a single hierarchy field (Jira's `parent`) cannot take both a
+    // direct parent AND an epic. The direct parent wins: it is the more specific relationship.
     if (epicActionId !== undefined && parentActionId !== undefined) {
       findings.push({
         severity: 'info',
@@ -259,7 +260,7 @@ export function buildPlan(
     const labels = issue.labels.map((label) => label.name);
     const assignees = issue.assignees.map((person) => person.email ?? person.displayName);
 
-    // ─── 3. Campos obrigatórios do destino ─────────────────────────────────
+    // ─── 3. Required target fields ─────────────────────────────────────────
     const issueFields = resolveFieldsFor(config, targetType);
     checkRequiredFields({
       capabilities,
@@ -316,8 +317,8 @@ export function buildPlan(
       });
     }
 
-    // Anexos de comentários também são anexados à issue: a maioria dos destinos
-    // não suporta anexo em comentário.
+    // Comment attachments are also attached to the issue: most targets do not
+    // support attachments on comments.
     const allAttachments = [
       ...issue.attachments,
       ...issue.comments.flatMap((comment) => comment.attachments),
@@ -363,10 +364,10 @@ export function buildPlan(
     }
   }
 
-  // ─── Links não-hierárquicos, deduplicados ─────────────────────────────────
+  // ─── Non-hierarchical links, deduplicated ─────────────────────────────────
   const linkActions = buildLinkActions(model.issues, droppedIssueIds, issueByRefId);
 
-  // ─── 4. Ordem final: catálogo → issues (pais antes) → filhos ──────────────
+  // ─── 4. Final order: catalog → issues (parents first) → children ──────────
   const actions: PlanAction[] = [
     ...catalogActions,
     ...orderIssueActions(issueActions),
@@ -395,7 +396,7 @@ interface ProvidedFieldsInput {
   hasVersion?: boolean;
 }
 
-/** Ids (normalizados) dos campos que o Planner vai realmente preencher. */
+/** (Normalized) ids of the fields the Planner will actually fill. */
 function providedFieldIds(input: ProvidedFieldsInput): Set<string> {
   const provided = new Set(ALWAYS_PROVIDED_FIELDS);
   if (input.hasPriority === true) provided.add('priority');
@@ -436,10 +437,10 @@ function checkRequiredFields(input: {
 }
 
 /**
- * Avisa quando a config aponta um custom field que o destino não declara —
- * normalmente erro de digitação no id ou config copiada de outro projeto.
- * Campos padrão (`summary`, `duedate`) não aparecem em `customFields`, então só
- * `customfield_*` é verificável.
+ * Warns when the config references a custom field the target does not declare —
+ * usually a typo in the id or a config copied from another project.
+ * Standard fields (`summary`, `duedate`) do not appear in `customFields`, so only
+ * `customfield_*` can be checked.
  */
 function validateConfiguredFields(
   config: MappingConfig,
@@ -493,7 +494,7 @@ function resolvePriority(
   return undefined;
 }
 
-/** Hierarquia explícita (`parentSourceRef`) tem precedência sobre link `child_of`. */
+/** Explicit hierarchy (`parentSourceRef`) takes precedence over a `child_of` link. */
 function resolveParentRefId(issue: Issue): string | undefined {
   if (issue.parentSourceRef !== undefined) return issue.parentSourceRef.id;
   return issue.links.find((link) => link.type === 'child_of')?.targetSourceRef.id;
@@ -520,9 +521,9 @@ function isStatusReachable(
 }
 
 /**
- * Converte links em ações, ignorando hierarquia (já resolvida por
- * `parentActionId`) e normalizando pares recíprocos para não criar o mesmo link
- * duas vezes (`A blocks B` + `B blocked_by A`).
+ * Converts links into actions, skipping hierarchy (already resolved via
+ * `parentActionId`) and normalizing reciprocal pairs so the same link is not
+ * created twice (`A blocks B` + `B blocked_by A`).
  */
 function buildLinkActions(
   issues: Issue[],
@@ -580,7 +581,7 @@ function canonicalizeLink(
     case 'duplicates':
       return { from: issueId, to: otherId, type };
     case 'relates_to': {
-      // Simétrico: ordenar o par torna a dedupe estável.
+      // Symmetric: sorting the pair makes deduplication stable.
       const [from, to] = [issueId, otherId].sort();
       if (from === undefined || to === undefined) return null;
       return { from, to, type: 'relates_to' };
@@ -588,7 +589,7 @@ function canonicalizeLink(
   }
 }
 
-/** Ordena issues de modo que todo pai apareça antes dos filhos. O grafo já é acíclico. */
+/** Orders issues so every parent comes before its children. The graph is already acyclic. */
 function orderIssueActions(actions: CreateIssueAction[]): CreateIssueAction[] {
   const byId = new Map(actions.map((action) => [action.id, action]));
   const visited = new Set<string>();

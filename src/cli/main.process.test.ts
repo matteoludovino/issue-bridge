@@ -8,17 +8,17 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * Testes do BINÁRIO, não das funções.
+ * Tests of the BINARY, not of the functions.
  *
- * Existem porque o wiring do commander em `main.ts` é a única parte do projeto
- * que nenhum teste de unidade alcança — e foi exatamente ali que apareceram os
- * dois bugs da fase (o `--json` do `ledger` colidindo com o global, e o ledger
- * vazio saindo em silêncio). Aqui a CLI é executada como o usuário executa:
- * processo separado, argv real, variáveis de ambiente reais, código de saída real.
+ * They exist because the commander wiring in `main.ts` is the only part of the project
+ * that no unit test reaches — and that is exactly where this phase's two bugs
+ * showed up (`ledger`'s `--json` clashing with the global one, and the empty
+ * ledger exiting silently). Here the CLI runs the way a user runs it:
+ * a separate process, real argv, real environment variables, real exit code.
  *
- * O segundo bloco vai além: migração completa contra um servidor HTTP local, o
- * que exercita config → composição → adapters → executor → ledger em disco →
- * relatório, atravessando socket de verdade.
+ * The second block goes further: a full migration against a local HTTP server,
+ * which exercises config → composition → adapters → executor → on-disk ledger →
+ * report, over a real socket.
  */
 
 const execFileAsync = promisify(execFile);
@@ -37,7 +37,7 @@ function runCli(args: string[], options: { cwd: string; env?: Record<string, str
       cwd: options.cwd,
       env: {
         PATH: process.env['PATH'] ?? '',
-        // Sem cor, para as asserções não dependerem de ANSI.
+        // No color, so the assertions do not depend on ANSI.
         NO_COLOR: '1',
         ...options.env,
       },
@@ -53,19 +53,19 @@ function runCli(args: string[], options: { cwd: string; env?: Record<string, str
 }
 
 const CREDENTIALS = {
-  GITHUB_TOKEN: 'ghp_teste',
+  GITHUB_TOKEN: 'ghp_test',
   JIRA_EMAIL: 'bot@acme.com',
-  JIRA_API_TOKEN: 'jira_teste',
+  JIRA_API_TOKEN: 'jira_test',
 };
 
 beforeAll(async () => {
-  // Compila antes de testar: um `dist` velho faria o teste validar código morto.
+  // Build before testing: a stale `dist` would make the test validate dead code.
   await execFileAsync(process.execPath, [join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.build.json'], {
     cwd: repoRoot,
   });
 }, 180_000);
 
-describe('CLI — ajuda e erros de configuração', () => {
+describe('CLI — help and configuration errors', () => {
   let workdir: string;
 
   beforeAll(async () => {
@@ -76,7 +76,7 @@ describe('CLI — ajuda e erros de configuração', () => {
     await rm(workdir, { recursive: true, force: true });
   });
 
-  it('--help lista os comandos e sai 0', async () => {
+  it('--help lists the commands and exits 0', async () => {
     const result = await runCli(['--help'], { cwd: workdir });
 
     expect(result.code).toBe(0);
@@ -85,31 +85,31 @@ describe('CLI — ajuda e erros de configuração', () => {
     }
   });
 
-  it('--version imprime a versão', async () => {
+  it('--version prints the version', async () => {
     const result = await runCli(['--version'], { cwd: workdir });
     expect(result.code).toBe(0);
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it('comando inexistente falha em vez de virar no-op', async () => {
-    const result = await runCli(['inexistente'], { cwd: workdir });
+  it('an unknown command fails instead of becoming a no-op', async () => {
+    const result = await runCli(['nonexistent'], { cwd: workdir });
     expect(result.code).not.toBe(0);
   });
 
-  it('config ausente sai 2 dizendo qual arquivo faltou', async () => {
-    const result = await runCli(['login', '-c', 'nao-existe.yaml'], {
+  it('a missing config exits 2 naming the missing file', async () => {
+    const result = await runCli(['login', '-c', 'does-not-exist.yaml'], {
       cwd: workdir,
       env: CREDENTIALS,
     });
 
     expect(result.code).toBe(2);
-    expect(result.stderr).toContain('nao-existe.yaml');
+    expect(result.stderr).toContain('does-not-exist.yaml');
   });
 
-  it('credenciais ausentes saem 2 listando todas de uma vez', async () => {
-    await writeFile(join(workdir, 'minima.yaml'), MINIMAL_CONFIG('https://acme.atlassian.net'), 'utf8');
+  it('missing credentials exit 2, listing all of them at once', async () => {
+    await writeFile(join(workdir, 'minimal.yaml'), MINIMAL_CONFIG('https://acme.atlassian.net'), 'utf8');
 
-    const result = await runCli(['login', '-c', 'minima.yaml'], { cwd: workdir });
+    const result = await runCli(['login', '-c', 'minimal.yaml'], { cwd: workdir });
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('GITHUB_TOKEN');
@@ -117,7 +117,7 @@ describe('CLI — ajuda e erros de configuração', () => {
     expect(result.stderr).toContain('JIRA_API_TOKEN');
   });
 
-  it('chave desconhecida na config sai 2 apontando o typo', async () => {
+  it('an unknown config key exits 2, pointing at the typo', async () => {
     await writeFile(
       join(workdir, 'typo.yaml'),
       `${MINIMAL_CONFIG('https://acme.atlassian.net')}\nmappings:\n  milestoneStategy: epic\n`,
@@ -130,10 +130,10 @@ describe('CLI — ajuda e erros de configuração', () => {
     expect(result.stderr).toContain('milestoneStategy');
   });
 
-  it('ledger vazio informa no stdout em vez de sair calado', async () => {
-    await writeFile(join(workdir, 'minima.yaml'), MINIMAL_CONFIG('https://acme.atlassian.net'), 'utf8');
+  it('an empty ledger says so on stdout instead of exiting silently', async () => {
+    await writeFile(join(workdir, 'minimal.yaml'), MINIMAL_CONFIG('https://acme.atlassian.net'), 'utf8');
 
-    const result = await runCli(['ledger', '-c', 'minima.yaml'], {
+    const result = await runCli(['ledger', '-c', 'minimal.yaml'], {
       cwd: workdir,
       env: CREDENTIALS,
     });
@@ -142,22 +142,22 @@ describe('CLI — ajuda e erros de configuração', () => {
     expect(result.stdout).toContain('ledger is empty');
   });
 
-  it('ledger --json imprime JSON no stdout, não a mensagem humana', async () => {
-    await writeFile(join(workdir, 'minima.yaml'), MINIMAL_CONFIG('https://acme.atlassian.net'), 'utf8');
+  it('ledger --json prints JSON on stdout, not the human message', async () => {
+    await writeFile(join(workdir, 'minimal.yaml'), MINIMAL_CONFIG('https://acme.atlassian.net'), 'utf8');
 
-    const result = await runCli(['ledger', '--json', '-c', 'minima.yaml'], {
+    const result = await runCli(['ledger', '--json', '-c', 'minimal.yaml'], {
       cwd: workdir,
       env: CREDENTIALS,
     });
 
-    // Regressão: o `--json` do comando e o global são o mesmo flag no commander.
+    // Regression: the command's `--json` and the global one are the same flag in commander.
     expect(result.code).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual([]);
     expect(result.stdout).not.toContain('empty');
   });
 });
 
-describe('CLI — migração completa contra servidor local', () => {
+describe('CLI — full migration against a local server', () => {
   let workdir: string;
   let server: Server;
   let baseUrl: string;
@@ -180,7 +180,7 @@ describe('CLI — migração completa contra servidor local', () => {
 
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
-    if (address === null || typeof address === 'string') throw new Error('sem porta');
+    if (address === null || typeof address === 'string') throw new Error('no port');
     baseUrl = `http://127.0.0.1:${String(address.port)}`;
 
     await writeFile(join(workdir, 'config.yaml'), configFor(baseUrl), 'utf8');
@@ -199,10 +199,10 @@ describe('CLI — migração completa contra servidor local', () => {
       response.end(JSON.stringify(payload));
     };
 
-    // Download do anexo, com a credencial da ORIGEM.
+    // Attachment download, with the SOURCE credential.
     if (url.startsWith('/assets/')) {
       if (request.headers.authorization !== `Bearer ${CREDENTIALS.GITHUB_TOKEN}`) {
-        json({ message: 'sem token da origem' }, 401);
+        json({ message: 'missing source token' }, 401);
         return;
       }
       response.writeHead(200, { 'content-type': 'image/png' });
@@ -210,13 +210,13 @@ describe('CLI — migração completa contra servidor local', () => {
       return;
     }
 
-    // Identidade da ORIGEM (GitHub). Match exato para não colidir com
-    // `/user/search`, que é do Jira.
+    // SOURCE identity (GitHub). Exact match so it does not collide with
+    // `/user/search`, which belongs to Jira.
     if (url === '/user') {
       json({ login: 'ana', id: 10 });
       return;
     }
-    // ── API da origem (GitHub), usada pelo `sync`
+    // ── Source API (GitHub), used by `sync`
     if (url.startsWith('/repos/acme/api/labels')) {
       json([]);
       return;
@@ -229,8 +229,8 @@ describe('CLI — migração completa contra servidor local', () => {
       json([
         {
           number: 5,
-          title: 'Issue que só existe no incremento',
-          body: 'corpo',
+          title: 'Issue that only exists in the increment',
+          body: 'body',
           state: 'open',
           labels: [],
           user: { login: 'ana', id: 10, html_url: `${baseUrl}/ana` },
@@ -301,7 +301,7 @@ describe('CLI — migração completa contra servidor local', () => {
       return;
     }
     if (url.includes('/attachments')) {
-      // Confere que o conteúdo chegou como multipart, não como URL.
+      // Checks that the content arrived as multipart, not as a URL.
       expect(body).toContain('filename="print.png"');
       json([{ id: '900', filename: 'print.png' }]);
       return;
@@ -320,10 +320,10 @@ describe('CLI — migração completa contra servidor local', () => {
       return;
     }
 
-    json({ errorMessages: [`rota não simulada: ${url}`] }, 404);
+    json({ errorMessages: [`route not mocked: ${url}`] }, 404);
   }
 
-  it('login valida as duas credenciais', async () => {
+  it('login validates both credentials', async () => {
     const result = await runCli(['login', '-c', 'config.yaml'], {
       cwd: workdir,
       env: CREDENTIALS,
@@ -333,16 +333,16 @@ describe('CLI — migração completa contra servidor local', () => {
     expect(requests.some((entry) => entry.url.includes('/rest/api/3/myself'))).toBe(true);
   });
 
-  it('analyze → apply → ledger → reapply, tudo pelo binário', async () => {
+  it('analyze → apply → ledger → reapply, all through the binary', async () => {
     const env = { ...CREDENTIALS };
 
-    // ── analyze: só leitura do destino
+    // ── analyze: read-only against the target
     const analyze = await runCli(
       ['-v', '--json', 'analyze', '-c', 'config.yaml', '--snapshot', 'snapshot.json'],
       { cwd: workdir, env },
     );
     expect(analyze.code).toBe(0);
-    // Com --json, todo evento de log é uma linha JSON válida.
+    // With --json, every log event is a valid JSON line.
     for (const line of analyze.stderr.trim().split('\n').filter(Boolean)) {
       expect(() => JSON.parse(line) as unknown).not.toThrow();
     }
@@ -362,7 +362,7 @@ describe('CLI — migração completa contra servidor local', () => {
       'Plan is valid',
     );
 
-    // ── apply sem --yes: simulação, nada escrito
+    // ── apply without --yes: dry run, nothing written
     const before = requests.filter((entry) => entry.method === 'POST').length;
     const simulated = await runCli(['apply', '-c', 'config.yaml', '--plan', '.issue-bridge/plan.json'], {
       cwd: workdir,
@@ -372,7 +372,7 @@ describe('CLI — migração completa contra servidor local', () => {
     expect(simulated.stderr).toContain('SIMULATION');
     expect(requests.filter((entry) => entry.method === 'POST')).toHaveLength(before);
 
-    // ── apply --yes: escreve de verdade
+    // ── apply --yes: writes for real
     const applied = await runCli(
       ['apply', '-c', 'config.yaml', '--plan', '.issue-bridge/plan.json', '--yes'],
       { cwd: workdir, env },
@@ -383,8 +383,8 @@ describe('CLI — migração completa contra servidor local', () => {
       .filter((entry) => entry.method === 'POST')
       .map((entry) => entry.url.replace('/rest/api/3', ''));
 
-    // A config usa concurrency > 1, então a ordem entre ações independentes não
-    // é determinística — o conjunto e as dependências são.
+    // The config uses concurrency > 1, so the order of independent actions is not
+    // deterministic — the set and the dependencies are.
     expect([...posted].sort()).toEqual(
       [
         '/issue',
@@ -397,13 +397,13 @@ describe('CLI — migração completa contra servidor local', () => {
       ].sort(),
     );
 
-    // A primeira escrita é sempre o épico: tudo o mais depende de algo.
+    // The first write is always the epic: everything else depends on something.
     expect(posted[0]).toBe('/issue');
 
-    // Invariante que vale com qualquer concorrência: comentário, anexo, link e
-    // transição dependem de uma issue, que por sua vez depende do épico — então
-    // nunca podem aparecer antes de duas criações de issue. A ordem estrita
-    // entre ações independentes é coberta nos testes de unidade do Executor.
+    // Invariant that holds at any concurrency: comment, attachment, link and
+    // transition depend on an issue, which in turn depends on the epic — so
+    // they can never appear before two issue creations. Strict ordering
+    // between independent actions is covered by the Executor unit tests.
     posted.forEach((path, index) => {
       if (path === '/issue') return;
       const issuesBefore = posted.slice(0, index).filter((earlier) => earlier === '/issue').length;
@@ -415,14 +415,14 @@ describe('CLI — migração completa contra servidor local', () => {
     expect(report).toContain('| Failed | 0 |');
     expect(report).toContain(`${baseUrl}/browse/ENG-2`);
 
-    // ── ledger: persistido em disco pelo processo anterior
+    // ── ledger: persisted to disk by the previous process
     const ledger = await runCli(['ledger', '--json', '-c', 'config.yaml'], { cwd: workdir, env });
     expect(ledger.code).toBe(0);
     const entries: { sourceId: string }[] = JSON.parse(ledger.stdout);
     expect(entries).toHaveLength(plan.actions.length);
     expect(entries.map((entry) => entry.sourceId)).toContain('github:acme/api:issue:1');
 
-    // ── reexecutar não duplica nada: idempotência de ponta a ponta
+    // ── re-running duplicates nothing: end-to-end idempotency
     const postsAfterApply = requests.filter((entry) => entry.method === 'POST').length;
     const reapplied = await runCli(
       ['apply', '-c', 'config.yaml', '--plan', '.issue-bridge/plan.json', '--yes'],
@@ -441,12 +441,12 @@ describe('CLI — migração completa contra servidor local', () => {
   syncTests({ workdir: () => workdir, requests: () => requests });
 });
 
-/** Roda depois do teste acima de propósito: reaproveita o ledger já povoado. */
+/** Runs after the test above on purpose: it reuses the already-populated ledger. */
 function syncTests(context: {
   workdir: () => string;
   requests: () => { method: string; url: string }[];
 }): void {
-  it('sync migra só o incremento e avança a marca d’água', async () => {
+  it('sync migrates only the increment and advances the watermark', async () => {
     const workdir = context.workdir();
     const env = { ...CREDENTIALS };
     const posts = (): number => context.requests().filter((entry) => entry.method === 'POST').length;
@@ -456,7 +456,7 @@ function syncTests(context: {
         .filter((entry) => entry.url.startsWith('/repos/acme/api/issues'))
         .map((entry) => entry.url);
 
-    // ── primeiro sync: sem marca d'água, cria a issue nova
+    // ── first sync: no watermark, creates the new issue
     const before = posts();
     const first = await runCli(['sync', '-c', 'config.yaml', '--yes'], { cwd: workdir, env });
 
@@ -470,7 +470,7 @@ function syncTests(context: {
     expect(state.identifier).toBe('acme/api');
     expect(Date.parse(state.lastSyncedAt)).not.toBeNaN();
 
-    // ── segundo sync: usa a marca e não reescreve nada
+    // ── second sync: uses the watermark and rewrites nothing
     const afterFirst = posts();
     const second = await runCli(['sync', '-c', 'config.yaml', '--yes'], { cwd: workdir, env });
 
@@ -479,7 +479,7 @@ function syncTests(context: {
     expect(posts()).toBe(afterFirst);
   }, 60_000);
 
-  it('sync em simulação não avança a marca d’água', async () => {
+  it('a dry-run sync does not advance the watermark', async () => {
     const workdir = context.workdir();
     const statePath = join(workdir, '.issue-bridge', 'sync-state.json');
     const before = await readFile(statePath, 'utf8');
@@ -514,7 +514,7 @@ target:
   projectKey: ENG
 `;
 
-/** Config apontando origem e destino para o servidor local. */
+/** Config pointing both source and target at the local server. */
 const configFor = (baseUrl: string): string => `version: 1
 source:
   platform: github
@@ -545,8 +545,8 @@ execution:
 `;
 
 /**
- * Snapshot escrito à mão: um épico (milestone), duas issues em hierarquia, um
- * comentário, um anexo e um link — cobre todos os tipos de ação do plano.
+ * Hand-written snapshot: one epic (milestone), two issues in a hierarchy, one
+ * comment, one attachment and one link — covers every plan action type.
  */
 function snapshotFor(baseUrl: string): unknown {
   const ref = (kind: string, id: string) => ({
@@ -570,8 +570,8 @@ function snapshotFor(baseUrl: string): unknown {
     issues: [
       {
         sourceRef: ref('issue', '1'),
-        title: 'Refatorar checkout',
-        body: 'Corpo com **negrito** e `código`.',
+        title: 'Refactor checkout',
+        body: 'Body with **bold** and `code`.',
         type: 'task',
         status: 'open',
         labels: [],
@@ -583,7 +583,7 @@ function snapshotFor(baseUrl: string): unknown {
           {
             sourceRef: ref('comment', 'c1'),
             author,
-            body: 'alinhado com o time',
+            body: 'aligned with the team',
             createdAt: '2026-01-02T00:00:00Z',
             attachments: [],
           },
@@ -594,8 +594,8 @@ function snapshotFor(baseUrl: string): unknown {
       },
       {
         sourceRef: ref('issue', '2'),
-        title: 'Corrigir cálculo de frete',
-        body: 'ver print',
+        title: 'Fix shipping cost calculation',
+        body: 'see screenshot',
         type: 'bug',
         status: 'closed',
         closedAt: '2026-02-01T00:00:00Z',

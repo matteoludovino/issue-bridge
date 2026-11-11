@@ -8,15 +8,15 @@ export interface CustomFieldDescriptor {
 }
 
 /**
- * Retrato do destino descoberto em runtime. É a segunda entrada do Planner e o
- * motivo pelo qual o planejamento pode ser puro: o core nunca assume tipos,
- * status ou campos obrigatórios.
+ * Snapshot of the target discovered at runtime. It is the Planner's second input
+ * and the reason planning can be pure: the core never assumes issue types,
+ * statuses or required fields.
  *
- * Convenções:
- *  - `workflow.statuses[0]` é o status inicial de uma issue recém-criada.
- *  - `workflow.transitions` mapeia status atual → status alcançáveis a partir dele.
- *  - `requiredFieldsByIssueType` é indexado pelo NOME do tipo no destino e lista
- *    ids/nomes de campo obrigatórios (`summary`, `customfield_10042`).
+ * Conventions:
+ *  - `workflow.statuses[0]` is the initial status of a newly created issue.
+ *  - `workflow.transitions` maps current status → statuses reachable from it.
+ *  - `requiredFieldsByIssueType` is keyed by the type NAME in the target and lists
+ *    required field ids/names (`summary`, `customfield_10042`).
  */
 export interface TargetCapabilities {
   issueTypes: string[];
@@ -33,11 +33,11 @@ export interface TargetCapabilities {
 }
 
 /**
- * Referência a um item já existente no destino.
+ * Reference to an item that already exists in the target.
  *
- * `url` admite `undefined` explícito porque este tipo atravessa fronteiras Zod
- * (ledger em JSON, log de execução), e o output do Zod sempre inclui `undefined`
- * em campo opcional. Nenhum consumidor distingue "ausente" de "undefined".
+ * `url` allows an explicit `undefined` because this type crosses Zod boundaries
+ * (JSON ledger, run log), and Zod's output always includes `undefined` in
+ * optional fields. No consumer distinguishes "absent" from "undefined".
  */
 export interface TargetItemRef {
   id: string;
@@ -48,17 +48,17 @@ export interface TargetItemRef {
 export type TargetItemKind = 'issue' | 'epic' | 'version' | 'component' | 'label';
 
 /**
- * Critério de busca por item pré-existente no destino. Usado para reconciliar
- * migrações parciais quando o RollbackStore foi perdido.
+ * Search criteria for a pre-existing item in the target. Used to reconcile
+ * partial migrations when the RollbackStore has been lost.
  */
 export interface FindExistingCriteria {
   kind: TargetItemKind;
   projectKey: string;
-  /** Entidade de origem que se procura no destino (via marcador de proveniência). */
+  /** Source entity to look for in the target (via the provenance marker). */
   sourceRef?: SourceRef;
-  /** Nome exato, para catálogos (versão, componente, label, épico). */
+  /** Exact name, for catalogs (version, component, label, epic). */
   name?: string;
-  /** Título exato, para issues. */
+  /** Exact title, for issues. */
   summary?: string;
 }
 
@@ -66,7 +66,7 @@ export interface CreateEpicInput {
   projectKey: string;
   name: string;
   description?: string;
-  /** Campos extras por id de campo do destino (inclui custom fields). */
+  /** Extra fields keyed by target field id (includes custom fields). */
   fields: Record<string, unknown>;
   sourceRef: SourceRef;
 }
@@ -98,7 +98,7 @@ export interface CreateIssueInput {
   priority?: string;
   labels: string[];
   assignees: string[];
-  /** Referências já resolvidas pelo Executor via RollbackStore. */
+  /** References already resolved by the Executor via the RollbackStore. */
   epicRef?: TargetItemRef;
   versionRef?: TargetItemRef;
   parentRef?: TargetItemRef;
@@ -115,11 +115,11 @@ export interface CreateCommentInput {
 export interface CreateAttachmentInput {
   issueRef: TargetItemRef;
   /**
-   * Conteúdo já baixado pelo Executor via `AttachmentFetcher`. O adapter de
-   * destino NÃO acessa a origem — não conhece a URL nem a credencial dela.
+   * Content already downloaded by the Executor via `AttachmentFetcher`. The target
+   * adapter does NOT access the source — it knows neither its URL nor its credential.
    */
   payload: AttachmentPayload;
-  /** URL de origem, apenas para diagnóstico e proveniência. */
+  /** Source URL, for diagnostics and provenance only. */
   sourceUrl: string;
   sourceRef: SourceRef;
 }
@@ -131,17 +131,17 @@ export interface CreateLinkInput {
 }
 
 /**
- * Porta de escrita. Um novo destino (Azure DevOps, Linear) implementa apenas
- * esta interface.
+ * Write port. A new target (Azure DevOps, Linear) implements only
+ * this interface.
  *
- * Contrato:
- *  - Cada método é uma escrita única e atômica do ponto de vista do Executor;
- *    o adapter NÃO faz retry nem batching (isso é política do Executor).
- *  - `discoverCapabilities()` é a única fonte de verdade sobre o destino.
- *  - Erros são lançados como `MigrationError` para o Executor classificar.
+ * Contract:
+ *  - Each method is a single, atomic write from the Executor's point of view;
+ *    the adapter does NOT retry or batch (that is the Executor's policy).
+ *  - `discoverCapabilities()` is the single source of truth about the target.
+ *  - Errors are thrown as `MigrationError` for the Executor to classify.
  */
 export interface TargetAdapter {
-  /** Identificador da plataforma (`jira`). */
+  /** Platform identifier (`jira`). */
   readonly platformName: string;
 
   authenticate(): Promise<void>;

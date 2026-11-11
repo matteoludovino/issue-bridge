@@ -32,7 +32,7 @@ function planWith(capabilitiesOverrides = {}): MigrationPlan {
 }
 
 describe('renderPlanReport', () => {
-  it('resume origem, destino e contagem de ações', () => {
+  it('summarizes source, target and action counts', () => {
     const report = renderPlanReport(planWith());
 
     expect(report).toContain('# Migration report — plan');
@@ -44,7 +44,7 @@ describe('renderPlanReport', () => {
     expect(report).toContain('Plan is valid: no blocking errors');
   });
 
-  it('destaca bloqueio e sugere a correção do finding', () => {
+  it('highlights a blocker and suggests the fix for the finding', () => {
     const report = renderPlanReport(
       planWith({ requiredFieldsByIssueType: { Bug: ['customfield_10042'] } }),
     );
@@ -53,11 +53,11 @@ describe('renderPlanReport', () => {
     expect(report).toContain('## Errors (these block apply)');
     expect(report).toContain('`missing_required_field`');
     expect(report).toContain('Provide a value under `mappings.fields`');
-    // Aponta a issue afetada com link para a origem.
+    // Points to the affected issue with a link to the source.
     expect(report).toContain('[#2](https://example.test/issue/2)');
   });
 
-  it('lista observações sem tratá-las como problema', () => {
+  it('lists notes without treating them as problems', () => {
     const plan = buildPlan(
       makeModel({ issues: [makeIssue({ id: '1', checklist: [{ text: 'a', checked: false }] })] }),
       makeCapabilities(),
@@ -78,7 +78,7 @@ describe('renderExecutionReport', () => {
 
   function resultFor(plan: MigrationPlan): ExecutionResult {
     const [epic, issue] = plan.actions;
-    if (epic === undefined || issue === undefined) throw new Error('plano vazio');
+    if (epic === undefined || issue === undefined) throw new Error('empty plan');
     return {
       succeeded: [
         { action: epic, targetRef: { id: '1', humanRef: 'ENG-1', url: 'https://j/browse/ENG-1' }, attempts: 3 },
@@ -98,7 +98,7 @@ describe('renderExecutionReport', () => {
     };
   }
 
-  it('resume execução, falhas e o mapa origem → destino', () => {
+  it('summarizes the execution, failures and the source → target map', () => {
     const report = renderExecutionReport(plan, resultFor(plan));
 
     expect(report).toContain('# Migration report — execution');
@@ -106,18 +106,18 @@ describe('renderExecutionReport', () => {
     expect(report).toContain('| Failed | 1 |');
     expect(report).toContain('## Source → target mapping');
     expect(report).toContain('[ENG-1](https://j/browse/ENG-1)');
-    // Sem url, mostra a chave em código.
+    // Without a url, shows the key as code.
     expect(report).toContain('`ENG-2`');
-    // Retry aparece como sinal de instabilidade.
+    // A retry shows up as a sign of instability.
     expect(report).toContain('1 action(s) only succeeded after a retry');
   });
 
-  it('escapa pipe da mensagem de erro para não quebrar a tabela', () => {
+  it('escapes pipes in the error message so the table does not break', () => {
     const report = renderExecutionReport(plan, resultFor(plan));
     expect(report).toContain('field X\\|Y is required');
   });
 
-  it('deixa explícito quando foi simulação', () => {
+  it('makes it explicit when it was a dry run', () => {
     const simulated = { ...resultFor(plan), dryRun: true, failed: [] };
     const report = renderExecutionReport(plan, simulated);
 

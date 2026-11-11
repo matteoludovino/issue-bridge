@@ -2,10 +2,10 @@ import type { TargetItemRef } from '../ports/target-adapter.js';
 import type { RollbackEntry, RollbackStore } from './executor.js';
 
 /**
- * Implementação em memória do `RollbackStore`.
+ * In-memory implementation of `RollbackStore`.
  *
- * Serve aos testes e ao `--dry-run`. A implementação durável (JSON/SQLite) vem
- * em fase posterior e não exige mudança no Executor.
+ * Used by tests and by `--dry-run`. The durable implementation (JSON/SQLite)
+ * comes in a later phase and requires no change to the Executor.
  */
 export class InMemoryRollbackStore implements RollbackStore {
   private readonly entries = new Map<string, TargetItemRef>();

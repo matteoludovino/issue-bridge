@@ -15,9 +15,9 @@ import { JsonRollbackStore } from './storage/json-rollback-store.js';
 import { SyncStateStore } from './storage/sync-state.js';
 
 /**
- * Raiz de composição: o único lugar que conhece config E adapters concretos ao
- * mesmo tempo. A CLI (fase seguinte) só chama estas funções — nenhum comando
- * precisa saber que a origem é GitHub ou que o destino é Jira.
+ * Composition root: the only place that knows both the config AND the concrete
+ * adapters. The CLI (next phase) only calls these functions — no command
+ * needs to know that the source is GitHub or that the target is Jira.
  */
 
 export function createSourceAdapter(loaded: LoadedConfig): GitHubSourceAdapter {
@@ -55,7 +55,7 @@ export function createRollbackStore(loaded: LoadedConfig): Promise<JsonRollbackS
   return JsonRollbackStore.open(loaded.config.execution.ledgerPath);
 }
 
-/** Executor completo, com ledger durável e download de anexo pela origem. */
+/** Full executor, with a durable ledger and attachment download through the source. */
 export async function createExecutor(loaded: LoadedConfig, logger: Logger): Promise<Executor> {
   const store = await createRollbackStore(loaded);
   return new Executor(
@@ -67,18 +67,18 @@ export async function createExecutor(loaded: LoadedConfig, logger: Logger): Prom
 }
 
 /**
- * `config.mappings` já tem exatamente a forma que o Planner consome — este
- * retorno tipado é o que garante, em tempo de compilação, que o schema do YAML
- * e o contrato do core não podem divergir sem quebrar o build.
+ * `config.mappings` already has exactly the shape the Planner consumes — this
+ * typed return is what guarantees, at compile time, that the YAML schema and
+ * the core contract cannot diverge without breaking the build.
  */
 export function toMappingConfig(config: MigrationConfig): MappingConfig {
   return config.mappings;
 }
 
 /**
- * `updatedSince` recebe o maior entre o piso da config e a marca d'água do
- * `sync` — assim um recorte histórico configurado nunca é desfeito por uma marca
- * mais antiga, e a marca nunca é ignorada quando é mais recente.
+ * `updatedSince` gets the later of the config floor and the `sync` watermark —
+ * so a configured historical cutoff is never undone by an older watermark, and
+ * the watermark is never ignored when it is more recent.
  */
 export function toExtractOptions(
   config: MigrationConfig,

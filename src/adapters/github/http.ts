@@ -11,7 +11,7 @@ import {
 
 export interface GitHubHttpOptions {
   token: string;
-  /** Sobrescreva para GitHub Enterprise Server. */
+  /** Override for GitHub Enterprise Server. */
   baseUrl?: string;
   userAgent?: string;
 }
@@ -20,8 +20,8 @@ const DEFAULT_BASE_URL = 'https://api.github.com';
 const PER_PAGE = 100;
 
 /**
- * Cliente REST do GitHub: autenticação, paginação por header `Link` e tradução
- * de falha nativa para `MigrationError`.
+ * GitHub REST client: authentication, `Link`-header pagination and translation
+ * of native failures into `MigrationError`.
  */
 export class GitHubHttp {
   private readonly baseUrl: string;
@@ -33,17 +33,17 @@ export class GitHubHttp {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
   }
 
-  // `z.output<S>` (e não um `T` livre) é obrigatório aqui: schemas com
-  // `.default()` têm entrada e saída diferentes, e um `z.ZodType<T>` faria o TS
-  // inferir o tipo de ENTRADA, deixando campos com default como opcionais.
+  // `z.output<S>` (rather than a free `T`) is required here: schemas with
+  // `.default()` have different input and output types, and a `z.ZodType<T>` would make TS
+  // infer the INPUT type, leaving defaulted fields optional.
   async get<S extends z.ZodTypeAny>(path: string, schema: S): Promise<z.output<S>> {
     const response = await this.send(this.resolve(path));
     return this.parse(schema, response.body, path);
   }
 
   /**
-   * Segue `rel="next"` até o fim ou até `limit` itens. `limit` é um teto de
-   * segurança: para de paginar assim que atingido.
+   * Follows `rel="next"` to the end or up to `limit` items. `limit` is a safety
+   * cap: pagination stops as soon as it is reached.
    */
   async paginate<S extends z.ZodTypeAny>(
     path: string,
@@ -66,7 +66,7 @@ export class GitHubHttp {
     return collected;
   }
 
-  /** Baixa conteúdo binário autenticado (anexo colado no corpo da issue). */
+  /** Downloads authenticated binary content (an attachment pasted into the issue body). */
   async getBytes(url: string): Promise<{ bytes: Uint8Array; contentType: string | undefined }> {
     const response = await this.send(url, 'binary');
     return {
@@ -115,7 +115,7 @@ export class GitHubHttp {
     const result = schema.safeParse(payload);
     if (result.success) return result.data;
 
-    // Contrato quebrado do GitHub: não é retentável, é bug ou mudança de API.
+    // GitHub broke the contract: not retryable, it is a bug or an API change.
     throw new MigrationError({
       code: 'validation',
       message: `Response from ${path} does not match the expected schema: ${result.error.issues
@@ -128,14 +128,14 @@ export class GitHubHttp {
 }
 
 /**
- * Traduz status HTTP + headers de rate limit para a taxonomia do core.
+ * Maps HTTP status + rate-limit headers to the core error taxonomy.
  *
- * O secondary rate limit do GitHub responde 403 com `retry-after`; o primário
- * responde 403/429 com `x-ratelimit-remaining: 0` e `x-ratelimit-reset`.
- * Ambos viram `rate-limit` com espera sugerida.
+ * GitHub's secondary rate limit responds 403 with `retry-after`; the primary one
+ * responds 403/429 with `x-ratelimit-remaining: 0` and `x-ratelimit-reset`.
+ * Both become `rate-limit` with a suggested wait.
  */
 export function toMigrationError(response: HttpResponse, rawUrl: string): MigrationError {
-  // Nunca interpolar a URL crua: a query string pode carregar conteúdo privado.
+  // Never interpolate the raw URL: the query string may carry private content.
   const url = redactUrl(rawUrl);
   const retryAfterMs = retryDelayMs(response.headers);
   const detail = summarizeBody(response.body, 200);

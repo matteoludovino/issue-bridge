@@ -13,22 +13,22 @@ const RANK: Record<LogLevel, number> = {
 
 export interface ConsoleLoggerOptions {
   level?: LogLevel;
-  /** Uma linha JSON por evento — para CI e agregadores de log. */
+  /** One JSON line per event — for CI and log aggregators. */
   json?: boolean;
-  /** Padrão: `stderr`, para o `stdout` ficar livre para dados. */
+  /** Default: `stderr`, so `stdout` stays free for data. */
   stream?: NodeJS.WriteStream;
 }
 
 /**
- * Logger de terminal sem dependência.
+ * Dependency-free terminal logger.
  *
- * Pino faria isso com mais throughput, mas o valor dele é log estruturado em
- * servidor de alta carga; aqui o que importa é saída legível para humano com um
- * modo `--json` opcional. `Logger` é uma porta, então trocar por Pino depois é
- * uma classe nova e nada mais.
+ * Pino would do this with more throughput, but its value is structured logging on
+ * high-load servers; what matters here is human-readable output with an
+ * optional `--json` mode. `Logger` is a port, so switching to Pino later is
+ * one new class and nothing more.
  *
- * Tudo vai para `stderr` de propósito: `stdout` fica reservado a dados
- * (`ledger --json`), então `issue-bridge ledger --json | jq` funciona.
+ * Everything goes to `stderr` on purpose: `stdout` is reserved for data
+ * (`ledger --json`), so `issue-bridge ledger --json | jq` works.
  */
 export class ConsoleLogger implements Logger {
   private readonly level: LogLevel;

@@ -5,31 +5,31 @@ import { MigrationError } from '../core/errors.js';
 
 const SyncStateSchema = z.object({
   version: z.literal(1),
-  /** Escopo sincronizado (`owner/repo`). */
+  /** Synced scope (`owner/repo`). */
   identifier: z.string().min(1),
-  /** Instante do início da última extração bem-sucedida, em ISO 8601. */
+  /** Start time of the last successful extraction, in ISO 8601. */
   lastSyncedAt: z.string().min(1),
 });
 
 export type SyncState = z.infer<typeof SyncStateSchema>;
 
 /**
- * Marca d'água do `sync`: até quando a origem já foi lida.
+ * `sync` watermark: up to when the source has already been read.
  *
- * Fica separada do ledger de propósito. O ledger responde "o que já existe no
- * destino"; isto responde "até onde já leguei a origem". São perguntas
- * diferentes, com ciclos de vida diferentes — apagar a marca d'água força uma
- * releitura completa sem perder as correspondências já criadas.
+ * Kept separate from the ledger on purpose. The ledger answers "what already exists
+ * in the target"; this answers "how far have I read the source". They are different
+ * questions, with different lifecycles — deleting the watermark forces a full
+ * re-read without losing the mappings already created.
  *
- * A marca é o instante de INÍCIO da extração, não o de término: qualquer item
- * alterado durante a execução entra na próxima janela em vez de ser perdido.
+ * The watermark is the time the extraction STARTED, not when it ended: any item
+ * changed during the run falls into the next window instead of being lost.
  */
 export class SyncStateStore {
   constructor(private readonly filePath: string) {}
 
   /**
-   * Devolve `null` quando não há marca — ou quando a marca é de outro escopo,
-   * o que evita sincronizar `repo-b` a partir da data de `repo-a`.
+   * Returns `null` when there is no watermark — or when it belongs to another scope,
+   * which prevents syncing `repo-b` from `repo-a`'s date.
    */
   async read(identifier: string): Promise<SyncState | null> {
     let raw: string;

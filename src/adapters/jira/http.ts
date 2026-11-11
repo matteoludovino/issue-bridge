@@ -10,9 +10,9 @@ import {
 } from '../http.js';
 
 export interface JiraHttpOptions {
-  /** Ex.: `https://acme.atlassian.net`. */
+  /** E.g. `https://acme.atlassian.net`. */
   baseUrl: string;
-  /** E-mail da conta Atlassian dona do API token. */
+  /** Email of the Atlassian account that owns the API token. */
   email: string;
   apiToken: string;
   userAgent?: string;
@@ -25,8 +25,8 @@ export interface FileUpload {
 }
 
 /**
- * Cliente REST v3 do Jira Cloud: Basic auth, multipart de anexo e tradução de
- * falha nativa para `MigrationError`.
+ * Jira Cloud REST v3 client: Basic auth, multipart attachment upload and translation
+ * of native failures into `MigrationError`.
  */
 export class JiraHttp {
   private readonly baseUrl: string;
@@ -58,7 +58,7 @@ export class JiraHttp {
     return this.parse(schema, response.body, path);
   }
 
-  /** Para endpoints que respondem 201/204 sem corpo (ex.: `POST /issueLink`). */
+  /** For endpoints that respond 201/204 with no body (e.g. `POST /issueLink`). */
   async postVoid(path: string, body: unknown): Promise<void> {
     await this.send({
       url: this.resolve(path),
@@ -69,9 +69,9 @@ export class JiraHttp {
   }
 
   /**
-   * Upload de anexo: `multipart/form-data` montado à mão (sem dependência de
-   * FormData/undici) e o header `X-Atlassian-Token: no-check`, exigido pelo Jira
-   * para proteção XSRF.
+   * Attachment upload: hand-built `multipart/form-data` (no dependency on
+   * FormData/undici) plus the `X-Atlassian-Token: no-check` header, which Jira requires
+   * for XSRF protection.
    */
   async postFile<S extends z.ZodTypeAny>(
     path: string,
@@ -150,14 +150,14 @@ export class JiraHttp {
 }
 
 /**
- * Traduz falha do Jira para a taxonomia do core.
+ * Maps Jira failures to the core error taxonomy.
  *
- * O 400 do Jira é o caso mais importante: é como ele reporta campo obrigatório
- * ausente e valor inválido de custom field. A mensagem preserva `errorMessages`
- * e `errors` para o relatório apontar exatamente qual campo reprovou.
+ * Jira's 400 is the most important case: it is how Jira reports a missing required
+ * field or an invalid custom field value. The message keeps `errorMessages`
+ * and `errors` so the report can point to exactly which field was rejected.
  */
 export function toMigrationError(response: HttpResponse, rawUrl: string): MigrationError {
-  // Nunca interpolar a URL crua: a query string pode carregar conteúdo privado.
+  // Never interpolate the raw URL: the query string may carry private content.
   const url = redactUrl(rawUrl);
   const detail = describeJiraError(response.body);
   const retryAfterMs = retryDelayMs(response.headers);
@@ -218,7 +218,7 @@ export function toMigrationError(response: HttpResponse, rawUrl: string): Migrat
   });
 }
 
-/** `{"errorMessages":[…],"errors":{"customfield_10042":"…"}}` → texto legível. */
+/** `{"errorMessages":[…],"errors":{"customfield_10042":"…"}}` → readable text. */
 function describeJiraError(body: string): string {
   try {
     const parsed: unknown = JSON.parse(body);
@@ -259,7 +259,7 @@ function multipartBody(boundary: string, file: FileUpload): Uint8Array {
   return body;
 }
 
-/** Aspas e quebras de linha corromperiam o header do multipart. */
+/** Quotes and line breaks would corrupt the multipart header. */
 function sanitizeFilename(filename: string): string {
   const cleaned = filename.replace(/["\r\n]/g, '').trim();
   return cleaned.length === 0 ? 'attachment' : cleaned;

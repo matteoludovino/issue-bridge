@@ -1,37 +1,37 @@
 import type { IssuePriority, IssueStatus, IssueType } from '../models/common.js';
 
 /**
- * Regras de tradução origem → destino consumidas pelo Planner.
+ * Source → target translation rules consumed by the Planner.
  *
- * Carregada do YAML na Fase de Config; aqui existe apenas o contrato que o
- * Planner consome. Todos os `Record` são totais sobre o enum neutro — não há
- * "tipo sem mapeamento", só mapeamento que aponta para um valor inexistente no
- * destino (detectado contra `TargetCapabilities` e reportado como
+ * Loaded from YAML in the Config Phase; this file only holds the contract the
+ * Planner consumes. Every `Record` is total over the neutral enum — there is no
+ * "unmapped type", only a mapping that points to a value that does not exist in
+ * the target (detected against `TargetCapabilities` and reported as
  * `unmapped_value`).
  */
 export interface MappingConfig {
-  /** Tipo neutro → nome do tipo de issue no destino. */
+  /** Neutral type → issue type name in the target. */
   issueTypes: Record<IssueType, string>;
-  /** Prioridade neutra → nome da prioridade no destino. */
+  /** Neutral priority → priority name in the target. */
   priorities: Record<IssuePriority, string>;
-  /** Status neutro → nome do status no destino. */
+  /** Neutral status → status name in the target. */
   statuses: Record<IssueStatus, string>;
-  /** Como materializar milestones: como épico ou como versão do projeto. */
+  /** How to materialize milestones: as an epic or as a project version. */
   milestoneStrategy: 'epic' | 'version';
   /**
-   * Prioridade usada quando a issue de origem não tem nenhuma.
-   * Ausente = issue fica sem prioridade no destino.
+   * Priority used when the source issue has none.
+   * Absent = the issue has no priority in the target.
    */
-  // `| undefined` explícito: este tipo é preenchido direto pelo output do Zod,
-  // que sempre inclui `undefined` em campo opcional.
+  // Explicit `| undefined`: this type is filled directly from Zod's output,
+  // which always includes `undefined` in optional fields.
   defaultPriority?: IssuePriority | undefined;
   /**
-   * Valores para campos do destino, por id de campo (`customfield_10042`).
+   * Values for target fields, keyed by field id (`customfield_10042`).
    *
-   * É o único canal capaz de satisfazer custom field obrigatório: sem isso,
-   * qualquer projeto com campo obrigatório customizado produz
-   * `missing_required_field` e bloqueia o `apply`. `byIssueType` sobrescreve
-   * `defaults` e é indexado pelo NOME do tipo no destino.
+   * This is the only channel able to satisfy a required custom field: without
+   * it, any project with a required custom field produces
+   * `missing_required_field` and blocks `apply`. `byIssueType` overrides
+   * `defaults` and is keyed by the type NAME in the target.
    */
   fields?:
     | {
@@ -41,7 +41,7 @@ export interface MappingConfig {
     | undefined;
 }
 
-/** Junta `defaults` + `byIssueType[targetType]`, com o específico vencendo. */
+/** Merges `defaults` + `byIssueType[targetType]`, with the more specific one winning. */
 export function resolveFieldsFor(
   config: MappingConfig,
   targetIssueType: string,

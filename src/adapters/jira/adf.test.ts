@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { markdownToAdf, parseInline } from './adf.js';
 
-describe('markdownToAdf — blocos', () => {
-  it('documento vazio ainda é um doc válido', () => {
+describe('markdownToAdf — blocks', () => {
+  it('an empty document is still a valid doc', () => {
     expect(markdownToAdf('')).toEqual({
       version: 1,
       type: 'doc',
@@ -10,30 +10,30 @@ describe('markdownToAdf — blocos', () => {
     });
   });
 
-  it('converte heading, parágrafo e régua', () => {
-    const doc = markdownToAdf('# Título\n\nTexto do corpo.\n\n---\n');
+  it('converts heading, paragraph and horizontal rule', () => {
+    const doc = markdownToAdf('# Title\n\nBody text.\n\n---\n');
 
     expect(doc.content).toEqual([
-      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Título' }] },
-      { type: 'paragraph', content: [{ type: 'text', text: 'Texto do corpo.' }] },
+      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Title' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Body text.' }] },
       { type: 'rule' },
     ]);
   });
 
-  it('preserva quebra simples dentro do parágrafo como hardBreak', () => {
-    const doc = markdownToAdf('linha um\nlinha dois');
+  it('keeps a single line break inside a paragraph as hardBreak', () => {
+    const doc = markdownToAdf('line one\nline two');
 
     expect(doc.content[0]).toEqual({
       type: 'paragraph',
       content: [
-        { type: 'text', text: 'linha um' },
+        { type: 'text', text: 'line one' },
         { type: 'hardBreak' },
-        { type: 'text', text: 'linha dois' },
+        { type: 'text', text: 'line two' },
       ],
     });
   });
 
-  it('converte code block cercado com linguagem', () => {
+  it('converts a fenced code block with a language', () => {
     const doc = markdownToAdf('```ts\nconst a = 1;\nconst b = 2;\n```');
 
     expect(doc.content[0]).toEqual({
@@ -43,25 +43,25 @@ describe('markdownToAdf — blocos', () => {
     });
   });
 
-  it('não interpreta markdown dentro de code block', () => {
-    const doc = markdownToAdf('```\n**não é negrito**\n```');
-    expect(doc.content[0]?.content?.[0]?.text).toBe('**não é negrito**');
+  it('does not interpret markdown inside a code block', () => {
+    const doc = markdownToAdf('```\n**not bold**\n```');
+    expect(doc.content[0]?.content?.[0]?.text).toBe('**not bold**');
   });
 
-  it('converte lista com marcador e lista ordenada', () => {
-    const doc = markdownToAdf('- um\n- dois\n\n1. primeiro\n2. segundo');
+  it('converts bullet and ordered lists', () => {
+    const doc = markdownToAdf('- one\n- two\n\n1. first\n2. second');
 
     expect(doc.content[0]).toMatchObject({ type: 'bulletList' });
     expect(doc.content[0]?.content).toHaveLength(2);
     expect(doc.content[1]).toMatchObject({ type: 'orderedList' });
     expect(doc.content[1]?.content?.[0]).toEqual({
       type: 'listItem',
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'primeiro' }] }],
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'first' }] }],
     });
   });
 
-  it('converte citação de múltiplas linhas', () => {
-    const doc = markdownToAdf('> primeira\n> segunda');
+  it('converts a multi-line blockquote', () => {
+    const doc = markdownToAdf('> first\n> second');
 
     expect(doc.content[0]).toEqual({
       type: 'blockquote',
@@ -69,46 +69,46 @@ describe('markdownToAdf — blocos', () => {
         {
           type: 'paragraph',
           content: [
-            { type: 'text', text: 'primeira' },
+            { type: 'text', text: 'first' },
             { type: 'hardBreak' },
-            { type: 'text', text: 'segunda' },
+            { type: 'text', text: 'second' },
           ],
         },
       ],
     });
   });
 
-  it('item de task list vira item de lista com o marcador preservado', () => {
-    const doc = markdownToAdf('- [x] feito\n- [ ] pendente');
+  it('a task list item becomes a list item with its marker preserved', () => {
+    const doc = markdownToAdf('- [x] done\n- [ ] pending');
 
     expect(doc.content[0]).toMatchObject({ type: 'bulletList' });
-    expect(doc.content[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe('[x] feito');
+    expect(doc.content[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe('[x] done');
   });
 });
 
-describe('parseInline — marcas', () => {
-  it('aplica code, strong, em e strike', () => {
-    expect(parseInline('use `npm ci`, é **importante** e *urgente*, não ~~opcional~~')).toEqual([
+describe('parseInline — marks', () => {
+  it('applies code, strong, em and strike', () => {
+    expect(parseInline('use `npm ci`, it is **important** and *urgent*, not ~~optional~~')).toEqual([
       { type: 'text', text: 'use ' },
       { type: 'text', text: 'npm ci', marks: [{ type: 'code' }] },
-      { type: 'text', text: ', é ' },
-      { type: 'text', text: 'importante', marks: [{ type: 'strong' }] },
-      { type: 'text', text: ' e ' },
-      { type: 'text', text: 'urgente', marks: [{ type: 'em' }] },
-      { type: 'text', text: ', não ' },
-      { type: 'text', text: 'opcional', marks: [{ type: 'strike' }] },
+      { type: 'text', text: ', it is ' },
+      { type: 'text', text: 'important', marks: [{ type: 'strong' }] },
+      { type: 'text', text: ' and ' },
+      { type: 'text', text: 'urgent', marks: [{ type: 'em' }] },
+      { type: 'text', text: ', not ' },
+      { type: 'text', text: 'optional', marks: [{ type: 'strike' }] },
     ]);
   });
 
-  it('converte link markdown e URL crua', () => {
-    expect(parseInline('veja [o doc](https://example.test/a) ou https://example.test/b')).toEqual([
-      { type: 'text', text: 'veja ' },
+  it('converts markdown links and bare URLs', () => {
+    expect(parseInline('see [the doc](https://example.test/a) or https://example.test/b')).toEqual([
+      { type: 'text', text: 'see ' },
       {
         type: 'text',
-        text: 'o doc',
+        text: 'the doc',
         marks: [{ type: 'link', attrs: { href: 'https://example.test/a' } }],
       },
-      { type: 'text', text: ' ou ' },
+      { type: 'text', text: ' or ' },
       {
         type: 'text',
         text: 'https://example.test/b',
@@ -117,9 +117,9 @@ describe('parseInline — marcas', () => {
     ]);
   });
 
-  it('não trata snake_case como itálico', () => {
-    expect(parseInline('campo user_name_id')).toEqual([
-      { type: 'text', text: 'campo user_name_id' },
+  it('does not treat snake_case as italic', () => {
+    expect(parseInline('field user_name_id')).toEqual([
+      { type: 'text', text: 'field user_name_id' },
     ]);
   });
 });

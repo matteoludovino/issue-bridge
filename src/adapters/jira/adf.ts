@@ -1,16 +1,16 @@
 /**
- * Conversor markdown → ADF (Atlassian Document Format).
+ * Markdown → ADF (Atlassian Document Format) converter.
  *
- * A REST v3 do Jira Cloud rejeita string em `description` e `comment.body`: exige
- * ADF. Sem esta conversão, todo corpo migrado chegaria como um bloco de markdown
- * literal — perda permanente de qualidade numa migração de mão única.
+ * Jira Cloud REST v3 rejects plain strings in `description` and `comment.body`: it requires
+ * ADF. Without this conversion, every migrated body would arrive as a block of literal
+ * markdown — a permanent loss of quality in a one-way migration.
  *
- * Escopo suportado: parágrafo, quebra de linha, heading, code block cercado,
- * lista com marcador, lista ordenada, citação, régua, e inline `code`, **negrito**,
- * *itálico*, ~~riscado~~, link markdown e URL crua.
+ * Supported: paragraph, line break, heading, fenced code block,
+ * bullet list, ordered list, blockquote, horizontal rule, plus inline `code`, **bold**,
+ * *italic*, ~~strikethrough~~, markdown links and bare URLs.
  *
- * Fora de escopo (degrada para texto, não quebra): tabela, marcas aninhadas,
- * lista aninhada, HTML embutido. Tudo aqui é função PURA.
+ * Out of scope (degrades to text, does not break): tables, nested marks,
+ * nested lists, embedded HTML. Everything here is a PURE function.
  */
 
 export interface AdfMark {
@@ -61,7 +61,7 @@ export function markdownToAdf(markdown: string): AdfDocument {
         code.push(lines[index] ?? '');
         index += 1;
       }
-      index += 1; // consome a cerca de fechamento (ou o fim do texto)
+      index += 1; // consumes the closing fence (or the end of the text)
       content.push({
         type: 'codeBlock',
         ...(language.length > 0 ? { attrs: { language } } : {}),
@@ -119,7 +119,7 @@ export function markdownToAdf(markdown: string): AdfDocument {
       continue;
     }
 
-    // Parágrafo: consome até linha vazia ou início de outro bloco.
+    // Paragraph: consumes up to a blank line or the start of another block.
     const paragraph: string[] = [];
     while (index < lines.length) {
       const current = lines[index] ?? '';
@@ -130,7 +130,7 @@ export function markdownToAdf(markdown: string): AdfDocument {
     content.push({ type: 'paragraph', content: parseInlineLines(paragraph) });
   }
 
-  // ADF não aceita `doc` sem conteúdo.
+  // ADF does not accept a `doc` without content.
   if (content.length === 0) content.push({ type: 'paragraph', content: [] });
   return { version: 1, type: 'doc', content };
 }
@@ -147,7 +147,7 @@ function startsBlock(line: string): boolean {
   );
 }
 
-/** Linhas de um mesmo parágrafo viram `hardBreak` — o GFM quebra em `\n` simples. */
+/** Lines of the same paragraph become `hardBreak` — GFM breaks on a single `\n`. */
 function parseInlineLines(lines: string[]): AdfNode[] {
   const nodes: AdfNode[] = [];
   lines.forEach((line, position) => {
@@ -164,9 +164,9 @@ const INLINE_PATTERN = new RegExp(
     '__([^_]+)__', // 3: strong
     '~~([^~]+)~~', // 4: strike
     '\\*([^*\\n]+)\\*', // 5: em
-    '(?<![\\w_])_([^_\\n]+)_(?![\\w_])', // 6: em (ignora snake_case)
-    '\\[([^\\]]*)\\]\\((https?://[^)\\s]+)\\)', // 7,8: link markdown
-    '(https?://[^\\s<>)\\]]+)', // 9: URL crua
+    '(?<![\\w_])_([^_\\n]+)_(?![\\w_])', // 6: em (ignores snake_case)
+    '\\[([^\\]]*)\\]\\((https?://[^)\\s]+)\\)', // 7,8: markdown link
+    '(https?://[^\\s<>)\\]]+)', // 9: bare URL
   ].join('|'),
   'g',
 );

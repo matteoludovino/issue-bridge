@@ -1,9 +1,9 @@
 /**
- * Formatação de terminal, sem dependência.
+ * Terminal formatting, dependency-free.
  *
- * Chalk e Ora resolvem isso, mas o que a CLI precisa aqui são ~30 linhas de
- * códigos ANSI e uma linha de progresso. Menos dependência = menos superfície de
- * supply chain num binário que carrega credenciais de dois sistemas.
+ * Chalk and Ora solve this, but what the CLI needs here is ~30 lines of
+ * ANSI codes and a progress line. Fewer dependencies = less supply-chain
+ * surface in a binary that carries credentials for two systems.
  */
 
 const colorsEnabled = (): boolean => {
@@ -35,7 +35,7 @@ export const symbol = {
   arrow: '→',
 };
 
-/** `1234` → `1.234` (separador pt-BR, sem depender de Intl na saída de log). */
+/** `1234` → `1.234` (pt-BR separator, without relying on Intl in log output). */
 export function formatNumber(value: number): string {
   return value.toLocaleString('pt-BR');
 }
@@ -49,8 +49,8 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Linha de progresso reescrita in-place quando há TTY; em pipe/CI, imprime só
- * marcos, para não poluir o log com milhares de linhas.
+ * Progress line rewritten in place when there is a TTY; in a pipe/CI it prints
+ * only milestones, so the log is not flooded with thousands of lines.
  */
 export class ProgressLine {
   private lastPrinted = -1;
@@ -69,7 +69,7 @@ export class ProgressLine {
       return;
     }
 
-    // Sem TTY: um marco a cada 10%.
+    // No TTY: one milestone every 10%.
     const decile = total === 0 ? 10 : Math.floor((done / total) * 10);
     if (decile === this.lastPrinted) return;
     this.lastPrinted = decile;

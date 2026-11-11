@@ -4,8 +4,8 @@ import type { HttpClient, HttpRequest, HttpResponse } from '../http.js';
 import { GitHubSourceAdapter } from './github-source-adapter.js';
 
 /**
- * Cliente HTTP falso: rotas casadas por substring de URL, na ordem em que foram
- * registradas. Nenhum mock de rede, nenhuma dependência de `Response`.
+ * Fake HTTP client: routes are matched by URL substring, in the order they were
+ * registered. No network mocks, no dependency on `Response`.
  */
 class FakeHttpClient implements HttpClient {
   readonly requests: string[] = [];
@@ -54,13 +54,13 @@ function adapterWith(client: FakeHttpClient): GitHubSourceAdapter {
 }
 
 describe('GitHubSourceAdapter.authenticate', () => {
-  it('valida a credencial contra /user', async () => {
+  it('validates the credentials against /user', async () => {
     const client = new FakeHttpClient().json('/user', { login: 'ana', id: 10 });
     await expect(adapterWith(client).authenticate()).resolves.toBeUndefined();
     expect(client.requests[0]).toContain('https://api.github.com/user');
   });
 
-  it('traduz 401 para MigrationError de auth, sem retry', async () => {
+  it('maps 401 to an auth MigrationError, without retry', async () => {
     const client = new FakeHttpClient().on('/user', {
       status: 401,
       headers: {},
@@ -82,18 +82,18 @@ describe('GitHubSourceAdapter.extract', () => {
     client = new FakeHttpClient();
   });
 
-  it('pagina pelo header Link, descarta PRs e monta o IssueModel', async () => {
+  it('paginates via the Link header, discards PRs and builds the IssueModel', async () => {
     client
       .json('/issues/1/comments', [
         {
           id: 555,
-          body: 'primeiro',
+          body: 'first',
           user: { login: 'bruno', id: 20, html_url: 'https://github.com/bruno' },
           created_at: '2026-01-03T00:00:00Z',
           html_url: 'https://github.com/acme/api/issues/1#issuecomment-555',
         },
       ])
-      .json('/labels', [{ name: 'bug', color: 'd73a4a', description: 'defeito' }])
+      .json('/labels', [{ name: 'bug', color: 'd73a4a', description: 'defect' }])
       .json('/milestones', [
         {
           number: 3,
@@ -121,17 +121,17 @@ describe('GitHubSourceAdapter.extract', () => {
       identifier: 'acme/api',
       extractedAt: '2026-03-01T00:00:00Z',
     });
-    // PR #3 foi descartado.
+    // PR #3 was discarded.
     expect(model.issues.map((issue) => issue.sourceRef.humanRef)).toEqual(['#1', '#2']);
     expect(model.issues[0]?.type).toBe('bug');
     expect(model.issues[0]?.comments).toHaveLength(1);
-    // Hierarquia: #2 declara `- [ ] #1`, então #1 recebe parentSourceRef.
+    // Hierarchy: #2 declares `- [ ] #1`, so #1 gets a parentSourceRef.
     expect(model.issues[0]?.parentSourceRef?.id).toBe('github:acme/api:issue:2');
-    expect(model.labels).toEqual([{ name: 'bug', color: 'd73a4a', description: 'defeito' }]);
+    expect(model.labels).toEqual([{ name: 'bug', color: 'd73a4a', description: 'defect' }]);
     expect(model.milestones[0]).toMatchObject({ title: 'Sprint 3', dueOn: '2026-04-01T00:00:00Z' });
   });
 
-  it('só busca comentários de issues que têm comentários', async () => {
+  it('only fetches comments for issues that have comments', async () => {
     client
       .json('/labels', [])
       .json('/milestones', [])
@@ -142,7 +142,7 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(client.requests.some((url) => url.includes('/comments'))).toBe(false);
   });
 
-  it('repassa filtros de state e label na query', async () => {
+  it('passes the state and label filters through in the query', async () => {
     client.json('/labels', []).json('/milestones', []).json('/issues?', []);
 
     await adapterWith(client).extract({
@@ -157,7 +157,7 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(issuesRequest).toContain('per_page=100');
   });
 
-  it('traduz updatedSince no filtro since da API (base do sync)', async () => {
+  it('maps updatedSince to the API since filter (the basis of sync)', async () => {
     client.json('/labels', []).json('/milestones', []).json('/issues?', []);
 
     await adapterWith(client).extract({
@@ -169,7 +169,7 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(issuesRequest).toContain('since=2026-03-01T00%3A00%3A00Z');
   });
 
-  it('sem updatedSince não manda since, para não recortar o histórico', async () => {
+  it('omits since without updatedSince, so history is not cut short', async () => {
     client.json('/labels', []).json('/milestones', []).json('/issues?', []);
 
     await adapterWith(client).extract({ identifier: 'acme/api' });
@@ -177,7 +177,7 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(client.requests.find((url) => url.includes('/issues?'))).not.toContain('since=');
   });
 
-  it('respeita maxItems como teto de itens lidos', async () => {
+  it('honors maxItems as a cap on items read', async () => {
     client
       .json('/labels', [])
       .json('/milestones', [])
@@ -188,13 +188,13 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(model.issues).toHaveLength(2);
   });
 
-  it('rejeita identificador fora do formato owner/repo', async () => {
+  it('rejects an identifier not in owner/repo format', async () => {
     await expect(adapterWith(client).extract({ identifier: 'acme' })).rejects.toMatchObject({
       code: 'validation',
     });
   });
 
-  it('classifica rate limit com espera sugerida', async () => {
+  it('classifies a rate limit with a suggested wait', async () => {
     client.on('/issues?', {
       status: 403,
       headers: { 'retry-after': '60', 'x-ratelimit-remaining': '0' },
@@ -209,15 +209,15 @@ describe('GitHubSourceAdapter.extract', () => {
     expect(error).toMatchObject({ code: 'rate-limit', retryable: true, retryAfterMs: 60_000 });
   });
 
-  it('classifica repositório inexistente como not-found', async () => {
-    // Sem rota registrada, o cliente falso devolve 404.
-    await expect(adapterWith(client).extract({ identifier: 'acme/ausente' })).rejects.toMatchObject(
+  it('classifies a nonexistent repository as not-found', async () => {
+    // With no route registered, the fake client returns 404.
+    await expect(adapterWith(client).extract({ identifier: 'acme/missing' })).rejects.toMatchObject(
       { code: 'not-found', retryable: false },
     );
   });
 
-  it('falha com validation quando o payload não bate com o schema', async () => {
-    client.json('/issues?', [{ number: 'não é número' }]);
+  it('fails with validation when the payload does not match the schema', async () => {
+    client.json('/issues?', [{ number: 'not a number' }]);
 
     await expect(adapterWith(client).extract({ identifier: 'acme/api' })).rejects.toMatchObject({
       code: 'validation',

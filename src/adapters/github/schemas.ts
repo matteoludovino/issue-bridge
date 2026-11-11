@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Schemas dos payloads REST do GitHub que o adapter consome.
+ * Schemas for the GitHub REST payloads the adapter consumes.
  *
- * Só os campos usados são declarados — o Zod descarta o resto. Campos que a API
- * devolve como `null` usam `.nullish()` para tolerar ausência e nulo.
+ * Only the fields in use are declared — Zod strips the rest. Fields the API
+ * returns as `null` use `.nullish()` to tolerate both absence and null.
  */
 
 export const GitHubUserSchema = z.object({
@@ -50,7 +50,7 @@ export const GitHubIssueSchema = z.object({
   closed_at: z.string().nullish(),
   html_url: z.string().url(),
   comments: z.number().default(0),
-  /** Presente somente quando o item é, na verdade, um pull request. */
+  /** Present only when the item is actually a pull request. */
   pull_request: z.unknown().optional(),
 });
 export type GitHubIssue = z.infer<typeof GitHubIssueSchema>;
@@ -65,7 +65,7 @@ export const GitHubCommentSchema = z.object({
 });
 export type GitHubComment = z.infer<typeof GitHubCommentSchema>;
 
-/** `GET /user` — usado apenas para validar a credencial. */
+/** `GET /user` — used only to validate the credentials. */
 export const GitHubViewerSchema = z.object({
   login: z.string(),
   id: z.number(),

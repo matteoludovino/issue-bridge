@@ -21,7 +21,7 @@ import type {
 } from '../ports/target-adapter.js';
 import type { MappingConfig } from '../planner/mapping-config.js';
 
-/** Fixtures in-memory. Nada aqui toca rede ou disco. */
+/** In-memory fixtures. Nothing here touches the network or disk. */
 
 export function ref(kind: string, id: string): SourceRef {
   return {
@@ -45,7 +45,7 @@ export function makeIssue(options: IssueOptions): Issue {
   return {
     sourceRef: ref('issue', id),
     title: `Issue ${id}`,
-    body: `Corpo da issue ${id}`,
+    body: `Body of issue ${id}`,
     type: 'task',
     status: 'open',
     labels: [],
@@ -134,7 +134,7 @@ export function makeMappingConfig(overrides: Partial<MappingConfig> = {}): Mappi
   };
 }
 
-/** `AttachmentFetcher` in-memory: devolve bytes determinísticos por URL. */
+/** In-memory `AttachmentFetcher`: returns deterministic bytes per URL. */
 export class FakeAttachmentFetcher implements AttachmentFetcher {
   readonly requested: string[] = [];
 
@@ -148,7 +148,7 @@ export class FakeAttachmentFetcher implements AttachmentFetcher {
   }
 }
 
-/** `SourceAdapter` in-memory: devolve um modelo fixo e registra as opções recebidas. */
+/** In-memory `SourceAdapter`: returns a fixed model and records the options it receives. */
 export class FakeSourceAdapter implements SourceAdapter {
   readonly platformName = 'fake-source';
   readonly extractCalls: ExtractOptions[] = [];
@@ -167,7 +167,7 @@ export class FakeSourceAdapter implements SourceAdapter {
   }
 }
 
-/** `Sleeper` que não dorme: registra as esperas e resolve na hora. */
+/** `Sleeper` that never sleeps: records the waits and resolves immediately. */
 export class RecordingSleeper implements Sleeper {
   readonly delays: number[] = [];
 
@@ -177,7 +177,7 @@ export class RecordingSleeper implements Sleeper {
   }
 }
 
-/** Logger que só acumula — permite assertar avisos sem poluir a saída do teste. */
+/** Logger that only accumulates — lets tests assert on warnings without polluting test output. */
 export class RecordingLogger implements Logger {
   readonly infos: string[] = [];
   readonly warns: string[] = [];
@@ -197,25 +197,25 @@ export class RecordingLogger implements Logger {
 }
 
 /**
- * `TargetAdapter` in-memory. Registra a ordem exata das chamadas e permite
- * programar falhas por id de origem, sem nenhum mock de rede.
+ * In-memory `TargetAdapter`. Records the exact order of calls and lets tests
+ * schedule failures by source id, without any network mocking.
  */
 export class FakeTargetAdapter implements TargetAdapter {
   readonly platformName = 'fake-target';
-  /** Chamadas na ordem em que ocorreram: `<método>:<identificador>`. */
+  /** Calls in the order they happened: `<method>:<identifier>`. */
   readonly calls: string[] = [];
-  /** Ids de origem cuja criação falha de forma PERMANENTE (não-retentável). */
+  /** Source ids whose creation fails PERMANENTLY (non-retryable). */
   readonly failingSourceIds = new Set<string>();
-  /** Id de origem → quantas vezes falhar com erro TRANSITÓRIO antes de dar certo. */
+  /** Source id → how many times to fail with a TRANSIENT error before succeeding. */
   readonly transientFailures = new Map<string, number>();
-  /** Quando true, `createLink` devolve `null` (destino sem referência de link). */
+  /** When true, `createLink` returns `null` (target without a link reference). */
   linkReturnsNull = false;
-  /** Tamanho de cada anexo recebido — prova que o conteúdo chegou, não a URL. */
+  /** Size of each received attachment — proves the content arrived, not the URL. */
   readonly uploadedBytes: number[] = [];
 
-  /** Id de origem → promise que precisa resolver antes da criação terminar. */
+  /** Source id → promise that must resolve before creation completes. */
   readonly gates = new Map<string, Promise<void>>();
-  /** Pico de chamadas simultâneas observado — prova de paralelismo real. */
+  /** Observed peak of concurrent calls — proof of real parallelism. */
   maxInFlight = 0;
 
   private counter = 0;
@@ -257,7 +257,7 @@ export class FakeTargetAdapter implements TargetAdapter {
   }
 
   createComment(input: CreateCommentInput): Promise<TargetItemRef> {
-    // O `@<issueRef>` deixa a resolução de dependência visível nos testes.
+    // The `@<issueRef>` suffix makes dependency resolution visible in tests.
     return this.record('createComment', `${input.sourceRef.id}@${input.issueRef.id}`);
   }
 
@@ -296,12 +296,12 @@ export class FakeTargetAdapter implements TargetAdapter {
   }
 
   private async respond(method: string, identifier: string): Promise<TargetItemRef> {
-    // Aceita falhar por id de origem puro, mesmo quando o identificador
-    // registrado carrega a referência resolvida (`<sourceId>@<targetId>`).
+    // Allows failing by bare source id, even when the recorded identifier
+    // carries the resolved reference (`<sourceId>@<targetId>`).
     const sourceId = identifier.split('@')[0] ?? identifier;
 
-    // Portão: segura esta chamada até o teste liberar, para observar o que roda
-    // em paralelo enquanto ela está pendente.
+    // Gate: holds this call until the test releases it, to observe what runs
+    // in parallel while it is pending.
     const gate = this.gates.get(sourceId) ?? this.gates.get(identifier);
     if (gate !== undefined) await gate;
 

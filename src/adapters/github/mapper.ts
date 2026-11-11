@@ -13,14 +13,14 @@ import type { LabelClassification } from './classification.js';
 import type { GitHubComment, GitHubIssue, GitHubLabel, GitHubMilestone, GitHubUser } from './schemas.js';
 
 /**
- * Tradução GitHub → `IssueModel`. Tudo aqui é função PURA: nenhuma chamada de
- * rede, nenhum estado. É o que permite testar o mapeamento (incluindo parsing de
- * markdown) sem tocar na API.
+ * GitHub → `IssueModel` translation. Everything here is a PURE function: no network
+ * calls, no state. That is what makes it possible to test the mapping (including markdown
+ * parsing) without touching the API.
  */
 
 const PLATFORM = 'github';
 
-/** Hosts que o GitHub usa para anexos colados no corpo do markdown. */
+/** Hosts GitHub uses for attachments pasted into the markdown body. */
 const ATTACHMENT_URL_MARKERS = [
   'user-images.githubusercontent.com',
   'objects.githubusercontent.com',
@@ -31,10 +31,10 @@ const ATTACHMENT_URL_MARKERS = [
 export interface MapperContext {
   /** `owner/repo`. */
   scope: string;
-  /** Base web para montar URL de issue referenciada mas não extraída. */
+  /** Web base URL for building links to issues that are referenced but not extracted. */
   webBaseUrl: string;
   classification: LabelClassification;
-  /** Guarda o payload original em `Issue.raw` (dobra o tamanho do snapshot). */
+  /** Keeps the original payload in `Issue.raw` (doubles the snapshot size). */
   includeRaw: boolean;
 }
 
@@ -74,7 +74,7 @@ export function userRef(context: MapperContext, user: GitHubUser): SourceRef {
   };
 }
 
-/** Usuário removido do GitHub vem como `null`; o modelo exige autor. */
+/** A deleted GitHub user comes back as `null`; the model requires an author. */
 export function toPerson(context: MapperContext, user: GitHubUser | null | undefined): Person {
   if (user === null || user === undefined) return { displayName: 'ghost' };
   return {
@@ -171,9 +171,9 @@ export function toIssue({ context, issue, comments }: MapIssueInput): Issue {
 }
 
 /**
- * Preenche `parentSourceRef` dos filhos a partir dos links `parent_of` do pai
- * (task list `- [ ] #12`). O GitHub não expõe hierarquia no payload de issues,
- * então essa é a única fonte disponível sem a API de sub-issues.
+ * Fills in the children's `parentSourceRef` from the parent's `parent_of` links
+ * (task list `- [ ] #12`). GitHub does not expose hierarchy in the issues payload,
+ * so this is the only source available without the sub-issues API.
  */
 export function applyHierarchy(issues: Issue[]): Issue[] {
   const known = new Set(issues.map((issue) => issue.sourceRef.id));
@@ -196,9 +196,9 @@ export function applyHierarchy(issues: Issue[]): Issue[] {
 }
 
 /**
- * Anexos do GitHub não vêm por API: imagens e arquivos colados vivem como URL no
- * markdown. `sourceRef.id` é sintetizado de forma determinística para que a
- * idempotência do Executor funcione entre execuções.
+ * GitHub attachments are not exposed through the API: pasted images and files live as URLs
+ * in the markdown. `sourceRef.id` is synthesized deterministically so that the
+ * Executor's idempotency holds across runs.
  */
 export function extractInlineAttachments(
   context: MapperContext,
@@ -229,7 +229,7 @@ export function extractInlineAttachments(
   return attachments;
 }
 
-/** `- [x] texto` → checklist; `- [ ] #12` → filho na hierarquia. */
+/** `- [x] text` → checklist; `- [ ] #12` → child in the hierarchy. */
 export function parseTaskList(body: string): {
   checklist: ChecklistItem[];
   childNumbers: number[];
@@ -254,7 +254,7 @@ export function parseTaskList(body: string): {
   return { checklist, childNumbers };
 }
 
-/** Palavras-chave que expressam relação entre issues no corpo. */
+/** Keywords in the body that express a relationship between issues. */
 const KEYWORD_LINK_PATTERNS: readonly { pattern: RegExp; type: LinkType }[] = [
   { pattern: /\b(?:blocked by|depends on|depende de|bloqueada por)\s+#(\d+)/gi, type: 'blocked_by' },
   { pattern: /\b(?:blocks|bloqueia)\s+#(\d+)/gi, type: 'blocks' },
@@ -286,12 +286,12 @@ function dedupeLinks(links: IssueLink[]): IssueLink[] {
 
 interface BodyUrl {
   url: string;
-  /** Texto do link/alt da imagem — melhor palpite de nome de arquivo. */
+  /** Link text / image alt text — the best guess at a filename. */
   label: string;
 }
 
 function* iterateBodyUrls(body: string): Generator<BodyUrl> {
-  // Markdown: ![alt](url) e [texto](url)
+  // Markdown: ![alt](url) and [text](url)
   for (const match of body.matchAll(/!?\[([^\]]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?[^)]*\)/g)) {
     const url = match[2];
     if (url !== undefined) yield { url, label: (match[1] ?? '').trim() };
@@ -301,7 +301,7 @@ function* iterateBodyUrls(body: string): Generator<BodyUrl> {
     const url = match[1];
     if (url !== undefined) yield { url, label: '' };
   }
-  // URL crua (anexo colado sem markdown)
+  // Bare URL (attachment pasted without markdown)
   for (const match of body.matchAll(/(?<![("'[])https?:\/\/[^\s)"'<>\]]+/g)) {
     yield { url: match[0], label: '' };
   }
@@ -319,7 +319,7 @@ function attachmentFilename(url: string, label: string, index: number): string {
   const decoded = safeDecode(lastSegment);
   if (looksLikeFilename(decoded)) return decoded;
 
-  return `anexo-${String(index + 1)}`;
+  return `attachment-${String(index + 1)}`;
 }
 
 const looksLikeFilename = (value: string): boolean => /^[^\\/]+\.[a-z0-9]{2,5}$/i.test(value);

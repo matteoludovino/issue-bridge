@@ -24,7 +24,7 @@ const codes = (plan: { findings: { code: string; severity: string }[] }, severit
   plan.findings.filter((finding) => finding.severity === severity).map((finding) => finding.code);
 
 describe('buildPlan — 1. milestones', () => {
-  it('cria épico e liga a issue via epicActionId quando a estratégia é "epic"', () => {
+  it('creates an epic and links the issue via epicActionId when the strategy is "epic"', () => {
     const milestone = makeMilestone('m1', 'Sprint 1');
     const model = makeModel({
       milestones: [milestone],
@@ -48,7 +48,7 @@ describe('buildPlan — 1. milestones', () => {
     expect(issue?.dependsOn).toEqual([epic?.id]);
   });
 
-  it('cria versão com releaseDate quando a estratégia é "version"', () => {
+  it('creates a version with releaseDate when the strategy is "version"', () => {
     const milestone = makeMilestone('m1', 'v1.2.0', '2026-03-31');
     const model = makeModel({
       milestones: [milestone],
@@ -71,7 +71,7 @@ describe('buildPlan — 1. milestones', () => {
     expect(issueActions(plan.actions)[0]?.versionActionId).toBe(plan.actions[0]?.id);
   });
 
-  it('cria create_label apenas para labels ausentes no destino', () => {
+  it('emits create_label only for labels missing in the target', () => {
     const model = makeModel({ labels: [{ name: 'bug' }, { name: 'novo' }] });
     const plan = buildPlan(
       model,
@@ -86,8 +86,8 @@ describe('buildPlan — 1. milestones', () => {
   });
 });
 
-describe('buildPlan — 2. resolução de tipo/prioridade/status', () => {
-  it('traduz valores neutros para os nomes reais do destino', () => {
+describe('buildPlan — 2. type/priority/status resolution', () => {
+  it('translates neutral values to the actual target names', () => {
     const model = makeModel({
       issues: [makeIssue({ id: '1', type: 'bug', priority: 'high', status: 'in_progress' })],
     });
@@ -106,13 +106,13 @@ describe('buildPlan — 2. resolução de tipo/prioridade/status', () => {
     expect(hasBlockingErrors(plan)).toBe(false);
   });
 
-  it('não gera transição quando o status resolvido já é o inicial do workflow', () => {
+  it('does not emit a transition when the resolved status is already the initial workflow status', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1', status: 'open' })] });
     const plan = buildPlan(model, makeCapabilities(), makeMappingConfig(), 'ENG', options);
     expect(kinds(plan.actions)).toEqual(['create_issue']);
   });
 
-  it('reporta unmapped_value e descarta a issue quando o tipo não existe no destino', () => {
+  it('reports unmapped_value and drops the issue when the type does not exist in the target', () => {
     const model = makeModel({
       issues: [makeIssue({ id: '1', type: 'bug' }), makeIssue({ id: '2', type: 'task' })],
     });
@@ -124,33 +124,33 @@ describe('buildPlan — 2. resolução de tipo/prioridade/status', () => {
 
     expect(codes(plan, 'error')).toEqual(['unmapped_value']);
     expect(hasBlockingErrors(plan)).toBe(true);
-    // A issue válida continua no plano: um item ruim não derruba o resto.
+    // The valid issue stays in the plan: one bad item does not take down the rest.
     expect(issueActions(plan.actions).map((action) => action.sourceRef.humanRef)).toEqual(['#2']);
   });
 
-  it('reporta unmapped_value para prioridade e status inexistentes no destino', () => {
+  it('reports unmapped_value for a priority and status that do not exist in the target', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1', priority: 'high', status: 'closed' })] });
     const config = makeMappingConfig({
       priorities: {
         highest: 'Highest',
-        high: 'Urgente',
+        high: 'Urgent',
         medium: 'Medium',
         low: 'Low',
         lowest: 'Lowest',
       },
-      statuses: { open: 'To Do', in_progress: 'In Progress', closed: 'Encerrado' },
+      statuses: { open: 'To Do', in_progress: 'In Progress', closed: 'Closed' },
     });
 
     const plan = buildPlan(model, makeCapabilities(), config, 'ENG', options);
 
     expect(codes(plan, 'error')).toEqual(['unmapped_value', 'unmapped_value']);
-    // A issue continua sendo criada — sem prioridade e sem transição inválida.
+    // The issue is still created — without a priority and without an invalid transition.
     const [issue] = issueActions(plan.actions);
     expect(issue?.priority).toBeUndefined();
     expect(kinds(plan.actions)).toEqual(['create_issue']);
   });
 
-  it('avisa quando o status resolvido não é alcançável pelo workflow', () => {
+  it('warns when the resolved status is not reachable through the workflow', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1', status: 'closed' })] });
     const capabilities = makeCapabilities({
       workflow: { statuses: ['To Do', 'In Progress', 'Done'], transitions: { 'To Do': [] } },
@@ -159,13 +159,13 @@ describe('buildPlan — 2. resolução de tipo/prioridade/status', () => {
     const plan = buildPlan(model, capabilities, makeMappingConfig(), 'ENG', options);
 
     expect(codes(plan, 'warning')).toEqual(['unreachable_status']);
-    // Ainda assim a transição é planejada: aviso, não bloqueio.
+    // The transition is still planned: a warning, not a blocker.
     expect(kinds(plan.actions)).toContain('transition_issue');
   });
 });
 
-describe('buildPlan — 3. campos obrigatórios', () => {
-  it('reporta missing_required_field só para o que o Planner não sabe preencher', () => {
+describe('buildPlan — 3. required fields', () => {
+  it('reports missing_required_field only for what the Planner cannot fill', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1', type: 'bug' })] });
     const capabilities = makeCapabilities({
       requiredFieldsByIssueType: { Bug: ['Summary', 'description', 'customfield_10042'] },
@@ -179,7 +179,7 @@ describe('buildPlan — 3. campos obrigatórios', () => {
     expect(errors[0]?.message).toContain('customfield_10042');
   });
 
-  it('considera preenchidos os campos derivados do modelo (labels, assignee, parent)', () => {
+  it('treats fields derived from the model (labels, assignee, parent) as filled', () => {
     const parent = makeIssue({ id: '1' });
     const child = makeIssue({
       id: '2',
@@ -204,8 +204,8 @@ describe('buildPlan — 3. campos obrigatórios', () => {
   });
 });
 
-describe('buildPlan — 4. ordenação', () => {
-  it('ordena catálogo → issues (pais antes) → comentários/anexos/links/transições', () => {
+describe('buildPlan — 4. ordering', () => {
+  it('orders catalog → issues (parents first) → comments/attachments/links/transitions', () => {
     const milestone = makeMilestone('m1', 'Sprint 1');
     const parent = makeIssue({
       id: '1',
@@ -228,7 +228,7 @@ describe('buildPlan — 4. ordenação', () => {
       ],
     });
 
-    // Filho declarado ANTES do pai de propósito: o Planner deve reordenar.
+    // Child deliberately declared BEFORE the parent: the Planner must reorder.
     const model = makeModel({ milestones: [milestone], issues: [child, parent] });
     const plan = buildPlan(model, makeCapabilities(), makeMappingConfig(), 'ENG', options);
 
@@ -252,7 +252,7 @@ describe('buildPlan — 4. ordenação', () => {
     });
   });
 
-  it('deduplica links recíprocos em uma única ação', () => {
+  it('deduplicates reciprocal links into a single action', () => {
     const a = makeIssue({
       id: '1',
       links: [{ type: 'blocks', targetSourceRef: ref('issue', '2') }],
@@ -276,8 +276,8 @@ describe('buildPlan — 4. ordenação', () => {
   });
 });
 
-describe('buildPlan — 5. ciclos', () => {
-  it('descarta apenas as issues do ciclo de hierarquia e mantém o resto do plano', () => {
+describe('buildPlan — 5. cycles', () => {
+  it('drops only the issues in the hierarchy cycle and keeps the rest of the plan', () => {
     const a = makeIssue({ id: '1', parentSourceRef: ref('issue', '2') });
     const b = makeIssue({ id: '2', parentSourceRef: ref('issue', '1') });
     const c = makeIssue({ id: '3' });
@@ -296,7 +296,7 @@ describe('buildPlan — 5. ciclos', () => {
     expect(issueActions(plan.actions).map((action) => action.sourceRef.humanRef)).toEqual(['#3']);
   });
 
-  it('trata ciclo de bloqueio como aviso e mantém as issues e os links', () => {
+  it('treats a blocking cycle as a warning and keeps the issues and links', () => {
     const a = makeIssue({
       id: '1',
       links: [{ type: 'blocks', targetSourceRef: ref('issue', '2') }],
@@ -321,8 +321,8 @@ describe('buildPlan — 5. ciclos', () => {
   });
 });
 
-describe('buildPlan — hierarquia', () => {
-  it('descarta o épico quando a issue já tem pai direto (destino só aceita um)', () => {
+describe('buildPlan — hierarchy', () => {
+  it('drops the epic when the issue already has a direct parent (target accepts only one)', () => {
     const milestone = makeMilestone('m1', 'Sprint 1');
     const parent = makeIssue({ id: '1' });
     const child = makeIssue({
@@ -351,8 +351,8 @@ describe('buildPlan — hierarquia', () => {
   });
 });
 
-describe('buildPlan — 6. mapeamento default', () => {
-  it('usa defaultPriority e reporta used_default_mapping', () => {
+describe('buildPlan — 6. default mapping', () => {
+  it('uses defaultPriority and reports used_default_mapping', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1' })] });
     const plan = buildPlan(
       model,
@@ -367,7 +367,7 @@ describe('buildPlan — 6. mapeamento default', () => {
     expect(hasBlockingErrors(plan)).toBe(false);
   });
 
-  it('deixa a issue sem prioridade quando não há default configurado', () => {
+  it('leaves the issue without a priority when no default is configured', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1' })] });
     const plan = buildPlan(model, makeCapabilities(), makeMappingConfig(), 'ENG', options);
 
@@ -376,21 +376,21 @@ describe('buildPlan — 6. mapeamento default', () => {
   });
 });
 
-describe('buildPlan — campos configurados', () => {
+describe('buildPlan — configured fields', () => {
   const capabilitiesComCampo = () =>
     makeCapabilities({
       requiredFieldsByIssueType: { Bug: ['summary', 'customfield_10042'] },
       customFields: [{ id: 'customfield_10042', name: 'Severity', type: 'option' }],
     });
 
-  it('mescla defaults com byIssueType, com o específico vencendo', () => {
+  it('merges defaults with byIssueType, with the more specific one winning', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1', type: 'bug' })] });
     const plan = buildPlan(
       model,
       makeCapabilities(),
       makeMappingConfig({
         fields: {
-          defaults: { customfield_10042: { value: 'Minor' }, customfield_10099: 'sempre' },
+          defaults: { customfield_10042: { value: 'Minor' }, customfield_10099: 'always' },
           byIssueType: { Bug: { customfield_10042: { value: 'Critical' } } },
         },
       }),
@@ -400,11 +400,11 @@ describe('buildPlan — campos configurados', () => {
 
     expect(issueActions(plan.actions)[0]?.fields).toEqual({
       customfield_10042: { value: 'Critical' },
-      customfield_10099: 'sempre',
+      customfield_10099: 'always',
     });
   });
 
-  it('campo obrigatório do destino deixa de bloquear quando a config o preenche', () => {
+  it('a required target field stops blocking when the config fills it', () => {
     const model = makeModel({ issues: [makeIssue({ id: '1', type: 'bug' })] });
 
     const semConfig = buildPlan(model, capabilitiesComCampo(), makeMappingConfig(), 'ENG', options);
@@ -420,7 +420,7 @@ describe('buildPlan — campos configurados', () => {
     expect(hasBlockingErrors(comConfig)).toBe(false);
   });
 
-  it('avisa uma única vez sobre custom field que não existe no destino', () => {
+  it('warns only once about a custom field that does not exist in the target', () => {
     const model = makeModel({
       issues: [makeIssue({ id: '1' }), makeIssue({ id: '2' })],
     });
@@ -437,7 +437,7 @@ describe('buildPlan — campos configurados', () => {
     expect(plan.findings[0]?.message).toContain('customfield_99999');
   });
 
-  it('valida campo obrigatório também no tipo usado para épicos', () => {
+  it('also validates required fields on the type used for epics', () => {
     const milestone = makeMilestone('m1', 'Sprint 1');
     const model = makeModel({ milestones: [milestone], issues: [] });
     const capabilities = makeCapabilities({
@@ -464,8 +464,8 @@ describe('buildPlan — campos configurados', () => {
   });
 });
 
-describe('buildPlan — pureza', () => {
-  it('é determinística: mesma entrada, mesmo plano', () => {
+describe('buildPlan — purity', () => {
+  it('is deterministic: same input, same plan', () => {
     const model = makeModel({
       milestones: [makeMilestone('m1', 'Sprint 1')],
       issues: [makeIssue({ id: '1', comments: [makeComment('c1')] })],

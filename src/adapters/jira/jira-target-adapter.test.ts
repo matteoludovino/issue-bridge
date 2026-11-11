@@ -4,7 +4,7 @@ import type { SourceRef } from '../../core/models/common.js';
 import type { HttpClient, HttpRequest, HttpResponse } from '../http.js';
 import { JiraTargetAdapter } from './jira-target-adapter.js';
 
-/** Cliente falso: rotas casadas por método + substring de URL, na ordem registrada. */
+/** Fake client: routes are matched by method + URL substring, in registration order. */
 class FakeJiraClient implements HttpClient {
   readonly sent: HttpRequest[] = [];
   private readonly routes: { method: string; pattern: string; response: HttpResponse }[] = [];
@@ -27,19 +27,19 @@ class FakeJiraClient implements HttpClient {
       return Promise.resolve({
         status: 404,
         headers: {},
-        body: '{"errorMessages":["rota não registrada"]}',
+        body: '{"errorMessages":["route not registered"]}',
       });
     }
     return Promise.resolve(route.response);
   }
 
-  /** Corpo JSON da primeira requisição que casa com método + padrão. */
+  /** JSON body of the first request that matches method + pattern. */
   bodyOf(method: string, pattern: string): Record<string, unknown> {
     const request = this.sent.find(
       (candidate) => candidate.method === method && candidate.url.includes(pattern),
     );
     if (request === undefined || typeof request.body !== 'string') {
-      throw new Error(`nenhuma requisição ${method} ${pattern} com corpo JSON`);
+      throw new Error(`no ${method} ${pattern} request with a JSON body`);
     }
     return JSON.parse(request.body) as Record<string, unknown>;
   }
@@ -48,7 +48,7 @@ class FakeJiraClient implements HttpClient {
     const request = this.sent.find(
       (candidate) => candidate.method === method && candidate.url.includes(pattern),
     );
-    if (request === undefined) throw new Error(`nenhuma requisição ${method} ${pattern}`);
+    if (request === undefined) throw new Error(`no ${method} ${pattern} request`);
     return request;
   }
 }
@@ -70,7 +70,7 @@ function adapterWith(client: FakeJiraClient): JiraTargetAdapter {
 }
 
 describe('JiraTargetAdapter.authenticate', () => {
-  it('valida credencial em /myself com Basic auth', async () => {
+  it('validates credentials at /myself with Basic auth', async () => {
     const client = new FakeJiraClient().json('GET', '/myself', {
       accountId: 'abc',
       displayName: 'Bot',
@@ -84,7 +84,7 @@ describe('JiraTargetAdapter.authenticate', () => {
     );
   });
 
-  it('traduz 401 para erro de auth não-retentável', async () => {
+  it('maps 401 to a non-retryable auth error', async () => {
     const client = new FakeJiraClient().route('GET', '/myself', 401, '{"errorMessages":["nope"]}');
 
     await expect(adapterWith(client).authenticate()).rejects.toMatchObject({
@@ -100,7 +100,7 @@ describe('JiraTargetAdapter.discoverCapabilities', () => {
   ): FakeJiraClient {
     return (
       new FakeJiraClient()
-        // Rotas mais específicas primeiro: a URL do projeto é prefixo das outras.
+        // Most specific routes first: the project URL is a prefix of the others.
         .json('GET', '/project/ENG/statuses', [
           {
             id: '10001',
@@ -142,14 +142,14 @@ describe('JiraTargetAdapter.discoverCapabilities', () => {
         .json('GET', '/project/ENG', {
           id: '10000',
           key: 'ENG',
-          name: 'Engenharia',
+          name: 'Engineering',
           components: [{ id: '1', name: 'API' }],
           versions: [{ id: '2', name: 'v1.0' }],
         })
     );
   }
 
-  it('monta o retrato do projeto a partir de createmeta, priority, statuses e label', async () => {
+  it('builds the project snapshot from createmeta, priority, statuses and label', async () => {
     const capabilities = await adapterWith(capabilitiesClient()).discoverCapabilities('ENG');
 
     expect(capabilities.issueTypes).toEqual(['Task', 'Epic']);
@@ -157,7 +157,7 @@ describe('JiraTargetAdapter.discoverCapabilities', () => {
     expect(capabilities.components).toEqual(['API']);
     expect(capabilities.versions).toEqual(['v1.0']);
     expect(capabilities.labels).toEqual(['infra']);
-    // Status deduplicado, ordem de workflow preservada: [0] é o inicial.
+    // Statuses deduplicated, workflow order preserved: [0] is the initial one.
     expect(capabilities.workflow.statuses).toEqual(['To Do', 'Done']);
     expect(capabilities.requiredFieldsByIssueType).toEqual({
       Task: ['summary', 'customfield_10042'],
@@ -168,7 +168,7 @@ describe('JiraTargetAdapter.discoverCapabilities', () => {
     ]);
   });
 
-  it('declara transições otimistas, porque o Jira não expõe o workflow sem issue', async () => {
+  it('declares optimistic transitions, because Jira does not expose the workflow without an issue', async () => {
     const capabilities = await adapterWith(capabilitiesClient()).discoverCapabilities('ENG');
 
     expect(capabilities.workflow.transitions).toEqual({
@@ -177,7 +177,7 @@ describe('JiraTargetAdapter.discoverCapabilities', () => {
     });
   });
 
-  it('degrada para lista de labels vazia quando o endpoint nega acesso', async () => {
+  it('degrades to an empty label list when the endpoint denies access', async () => {
     const client = capabilitiesClient({
       status: 403,
       body: '{"errorMessages":["forbidden"]}',
@@ -185,20 +185,20 @@ describe('JiraTargetAdapter.discoverCapabilities', () => {
 
     const capabilities = await adapterWith(client).discoverCapabilities('ENG');
 
-    // A descoberta inteira não pode cair por causa de um catálogo secundário.
+    // The whole discovery must not fail because of a secondary catalog.
     expect(capabilities.labels).toEqual([]);
     expect(capabilities.issueTypes).toEqual(['Task', 'Epic']);
   });
 });
 
-describe('JiraTargetAdapter — escrita', () => {
+describe('JiraTargetAdapter — writes', () => {
   let client: FakeJiraClient;
 
   beforeEach(() => {
     client = new FakeJiraClient();
   });
 
-  it('cria issue com ADF, label sanitizada, assignee resolvido e custom field', async () => {
+  it('creates an issue with ADF, a sanitized label, a resolved assignee and a custom field', async () => {
     client
       .json('GET', '/user/search', [{ accountId: 'acc-123', emailAddress: 'ana@example.test' }])
       .json('POST', '/rest/api/3/issue', { id: '10500', key: 'ENG-5' });
@@ -206,10 +206,10 @@ describe('JiraTargetAdapter — escrita', () => {
     const ref = await adapterWith(client).createIssue({
       projectKey: 'ENG',
       issueType: 'Bug',
-      summary: 'Falha no login',
-      description: 'Corpo com **negrito**',
+      summary: 'Login failure',
+      description: 'Body with **bold**',
       priority: 'High',
-      labels: ['precisa revisão'],
+      labels: ['needs review'],
       assignees: ['ana@example.test'],
       fields: { customfield_10042: { value: 'Critical' } },
       sourceRef,
@@ -225,13 +225,13 @@ describe('JiraTargetAdapter — escrita', () => {
     expect(fields['project']).toEqual({ key: 'ENG' });
     expect(fields['issuetype']).toEqual({ name: 'Bug' });
     expect(fields['priority']).toEqual({ name: 'High' });
-    expect(fields['labels']).toEqual(['precisa-revisão']);
+    expect(fields['labels']).toEqual(['needs-review']);
     expect(fields['assignee']).toEqual({ id: 'acc-123' });
     expect(fields['customfield_10042']).toEqual({ value: 'Critical' });
     expect(fields['description']).toMatchObject({ type: 'doc', version: 1 });
   });
 
-  it('mantém a issue quando o assignee não existe no destino', async () => {
+  it('keeps the issue when the assignee does not exist in the target', async () => {
     client
       .json('GET', '/user/search', [])
       .json('POST', '/rest/api/3/issue', { id: '1', key: 'ENG-1' });
@@ -251,7 +251,7 @@ describe('JiraTargetAdapter — escrita', () => {
     expect(fields['assignee']).toBeUndefined();
   });
 
-  it('pai direto prevalece sobre épico no único campo parent do Jira', async () => {
+  it('a direct parent takes precedence over the epic in the single Jira parent field', async () => {
     client.json('POST', '/rest/api/3/issue', { id: '1', key: 'ENG-1' });
 
     await adapterWith(client).createIssue({
@@ -271,7 +271,7 @@ describe('JiraTargetAdapter — escrita', () => {
     expect(fields['parent']).toEqual({ id: '8000' });
   });
 
-  it('cria épico como issue do tipo configurado', async () => {
+  it('creates an epic as an issue of the configured type', async () => {
     client.json('POST', '/rest/api/3/issue', { id: '2', key: 'ENG-2' });
 
     await new JiraTargetAdapter({
@@ -279,24 +279,24 @@ describe('JiraTargetAdapter — escrita', () => {
       email: 'bot@acme.com',
       apiToken: 'token',
       httpClient: client,
-      epicIssueTypeName: 'Iniciativa',
+      epicIssueTypeName: 'Initiative',
     }).createEpic({ projectKey: 'ENG', name: 'Sprint 3', fields: {}, sourceRef });
 
     const fields = client.bodyOf('POST', '/rest/api/3/issue')['fields'] as Record<string, unknown>;
-    expect(fields['issuetype']).toEqual({ name: 'Iniciativa' });
+    expect(fields['issuetype']).toEqual({ name: 'Initiative' });
     expect(fields['summary']).toBe('Sprint 3');
   });
 
-  it('createLabel é no-op: não faz requisição', async () => {
+  it('createLabel is a no-op: it sends no request', async () => {
     const ref = await adapterWith(client).createLabel({ projectKey: 'ENG', name: 'infra' });
 
     expect(ref).toEqual({ id: 'infra', humanRef: 'infra' });
     expect(client.sent).toEqual([]);
   });
 
-  it('cria versão com releaseDate no formato aceito pelo Jira', async () => {
+  it('creates a version with releaseDate in the format Jira accepts', async () => {
     client
-      .json('GET', '/project/ENG', { id: '10000', key: 'ENG', name: 'Engenharia' })
+      .json('GET', '/project/ENG', { id: '10000', key: 'ENG', name: 'Engineering' })
       .json('POST', '/rest/api/3/version', { id: '77', name: 'v1.2' });
 
     await adapterWith(client).createVersion({
@@ -313,12 +313,12 @@ describe('JiraTargetAdapter — escrita', () => {
     });
   });
 
-  it('cria comentário com corpo em ADF', async () => {
+  it('creates a comment with an ADF body', async () => {
     client.json('POST', '/issue/10500/comment', { id: '900' });
 
     const ref = await adapterWith(client).createComment({
       issueRef: { id: '10500', humanRef: 'ENG-5' },
-      body: '# Nota\n\ntexto',
+      body: '# Note\n\ntext',
       sourceRef,
     });
 
@@ -328,7 +328,7 @@ describe('JiraTargetAdapter — escrita', () => {
     expect((body['content'] as unknown[]).length).toBe(2);
   });
 
-  it('sobe anexo como multipart com o token XSRF e os bytes recebidos', async () => {
+  it('uploads an attachment as multipart with the XSRF token and the received bytes', async () => {
     client.json('POST', '/attachments', [{ id: '901', filename: 'print.png' }]);
 
     const ref = await adapterWith(client).createAttachment({
@@ -354,7 +354,7 @@ describe('JiraTargetAdapter — escrita', () => {
     expect(text).toContain('Content-Type: image/png');
   });
 
-  it('cria link com direção outward/inward e devolve null', async () => {
+  it('creates a link with outward/inward direction and returns null', async () => {
     client.route('POST', '/issueLink', 201, '');
 
     const result = await adapterWith(client).createLink({
@@ -371,7 +371,7 @@ describe('JiraTargetAdapter — escrita', () => {
     });
   });
 
-  it('transiciona pelo id da transição que leva ao status pedido', async () => {
+  it('transitions using the id of the transition that leads to the requested status', async () => {
     client
       .json('GET', '/transitions', {
         transitions: [
@@ -386,7 +386,7 @@ describe('JiraTargetAdapter — escrita', () => {
     expect(client.bodyOf('POST', '/transitions')).toEqual({ transition: { id: '31' } });
   });
 
-  it('falha listando as transições reais quando o status não é alcançável', async () => {
+  it('fails listing the actual transitions when the status is not reachable', async () => {
     client.json('GET', '/transitions', {
       transitions: [{ id: '21', name: 'Start', to: { id: '2', name: 'In Progress' } }],
     });
@@ -399,7 +399,7 @@ describe('JiraTargetAdapter — escrita', () => {
     });
   });
 
-  it('preserva o campo reprovado quando o Jira responde 400', async () => {
+  it('keeps the rejected field when Jira responds 400', async () => {
     client.route(
       'POST',
       '/rest/api/3/issue',

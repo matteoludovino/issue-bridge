@@ -1,6 +1,6 @@
 /**
- * Grafo dirigido mínimo para detecção de ciclos no Planner.
- * Sem dependências externas e sem I/O — mantém `buildPlan` puro.
+ * Minimal directed graph for cycle detection in the Planner.
+ * No external dependencies and no I/O — keeps `buildPlan` pure.
  */
 export type DirectedGraph = Map<string, Set<string>>;
 
@@ -14,12 +14,12 @@ export function addEdge(graph: DirectedGraph, from: string, to: string): void {
 }
 
 /**
- * Retorna os componentes fortemente conexos que contêm ciclo (tamanho > 1 ou
- * self-loop), via Tarjan. Cada componente vem ordenado alfabeticamente para que
- * a saída do Planner seja determinística.
+ * Returns the strongly connected components that contain a cycle (size > 1 or
+ * a self-loop), using Tarjan's algorithm. Each component is sorted
+ * alphabetically so the Planner's output is deterministic.
  *
- * A recursão tem profundidade igual à do DFS — aceitável porque os grafos aqui
- * são de hierarquia de issues (rasos), não grafos arbitrários.
+ * Recursion depth equals the DFS depth — acceptable because the graphs here
+ * are (shallow) issue hierarchies, not arbitrary graphs.
  */
 export function findCyclicComponents(graph: DirectedGraph): string[][] {
   let counter = 0;
@@ -62,7 +62,7 @@ export function findCyclicComponents(graph: DirectedGraph): string[][] {
     }
   };
 
-  // Iterar só as chaves basta: todo nó em ciclo tem aresta de saída.
+  // Iterating over the keys alone is enough: every node in a cycle has an outgoing edge.
   for (const node of [...graph.keys()].sort()) {
     if (!index.has(node)) strongConnect(node);
   }

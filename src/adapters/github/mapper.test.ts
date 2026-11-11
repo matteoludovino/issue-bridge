@@ -20,7 +20,7 @@ const context: MapperContext = {
 function rawIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
   return {
     number: 1,
-    title: 'Falha no login',
+    title: 'Login failure',
     body: '',
     state: 'open',
     labels: [],
@@ -34,75 +34,75 @@ function rawIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
   };
 }
 
-describe('classificação por label', () => {
-  it('resolve tipo por precedência quando há labels conflitantes', () => {
+describe('label classification', () => {
+  it('resolves the type by precedence when labels conflict', () => {
     expect(classifyType(['bug', 'epic'], DEFAULT_LABEL_CLASSIFICATION)).toBe('epic');
     expect(classifyType(['enhancement', 'bug'], DEFAULT_LABEL_CLASSIFICATION)).toBe('bug');
     expect(classifyType(['Bug'], DEFAULT_LABEL_CLASSIFICATION)).toBe('bug');
-    expect(classifyType(['sem-correspondencia'], DEFAULT_LABEL_CLASSIFICATION)).toBe('task');
+    expect(classifyType(['no-match'], DEFAULT_LABEL_CLASSIFICATION)).toBe('task');
   });
 
-  it('resolve prioridade pela mais alta e devolve undefined sem label', () => {
+  it('resolves priority to the highest one and returns undefined without a label', () => {
     expect(classifyPriority(['p3', 'p1'], DEFAULT_LABEL_CLASSIFICATION)).toBe('high');
     expect(classifyPriority(['priority: low'], DEFAULT_LABEL_CLASSIFICATION)).toBe('low');
     expect(classifyPriority(['docs'], DEFAULT_LABEL_CLASSIFICATION)).toBeUndefined();
   });
 
-  it('deriva in_progress de label e closed do estado', () => {
+  it('derives in_progress from a label and closed from the state', () => {
     expect(classifyStatus('open', ['WIP'], DEFAULT_LABEL_CLASSIFICATION)).toBe('in_progress');
     expect(classifyStatus('open', [], DEFAULT_LABEL_CLASSIFICATION)).toBe('open');
     expect(classifyStatus('closed', ['wip'], DEFAULT_LABEL_CLASSIFICATION)).toBe('closed');
   });
 });
 
-describe('anexos inline no markdown', () => {
-  it('captura imagem markdown, tag img e URL crua, sem duplicar', () => {
+describe('inline attachments in markdown', () => {
+  it('captures markdown images, img tags and bare URLs, without duplicates', () => {
     const body = [
-      '![captura de tela.png](https://user-images.githubusercontent.com/1/aaa.png)',
+      '![screen capture.png](https://user-images.githubusercontent.com/1/aaa.png)',
       '<img src="https://user-images.githubusercontent.com/1/bbb.png" width="300">',
-      'Log completo: https://github.com/user-attachments/assets/9f2c-uuid',
-      'Repetida: ![x](https://user-images.githubusercontent.com/1/aaa.png)',
-      'Link normal ignorado: https://example.com/docs',
+      'Full log: https://github.com/user-attachments/assets/9f2c-uuid',
+      'Repeated: ![x](https://user-images.githubusercontent.com/1/aaa.png)',
+      'Plain link, ignored: https://example.com/docs',
     ].join('\n\n');
 
     const attachments = extractInlineAttachments(context, body, 'issue-1');
 
     expect(attachments.map((attachment) => attachment.filename)).toEqual([
-      'captura de tela.png',
+      'screen capture.png',
       'bbb.png',
-      'anexo-3',
+      'attachment-3',
     ]);
     expect(attachments.every((attachment) => attachment.origin === 'inline_body')).toBe(true);
     expect(attachments[0]?.sourceRef.id).toBe('github:acme/api:attachment:issue-1#inline-0');
   });
 
-  it('não inventa anexo quando o corpo não tem URL de anexo do GitHub', () => {
-    expect(extractInlineAttachments(context, 'texto puro', 'issue-1')).toEqual([]);
+  it('does not invent attachments when the body has no GitHub attachment URL', () => {
+    expect(extractInlineAttachments(context, 'plain text', 'issue-1')).toEqual([]);
   });
 });
 
 describe('task list', () => {
-  it('separa itens de checklist de referências a issues filhas', () => {
+  it('separates checklist items from references to child issues', () => {
     const body = [
-      '- [x] Escrever testes',
+      '- [x] Write tests',
       '- [ ] #42',
-      '* [ ] Revisar documentação',
+      '* [ ] Review documentation',
       '- [ ] https://github.com/acme/api/issues/43',
-      'texto que não é item',
+      'text that is not an item',
     ].join('\n');
 
     const { checklist, childNumbers } = parseTaskList(body);
 
     expect(checklist).toEqual([
-      { text: 'Escrever testes', checked: true },
-      { text: 'Revisar documentação', checked: false },
+      { text: 'Write tests', checked: true },
+      { text: 'Review documentation', checked: false },
     ]);
     expect(childNumbers).toEqual([42, 43]);
   });
 });
 
-describe('links por palavra-chave', () => {
-  it('extrai relações agrupadas por tipo (a dedupe acontece em toIssue)', () => {
+describe('keyword links', () => {
+  it('extracts relationships grouped by type (deduplication happens in toIssue)', () => {
     const body = 'Blocked by #10. Depends on #10. Duplicate of #11. Relates to #12. Blocks #13.';
     const links = extractKeywordLinks(context, body);
 
@@ -115,7 +115,7 @@ describe('links por palavra-chave', () => {
     ]);
   });
 
-  it('toIssue remove links repetidos', () => {
+  it('toIssue removes duplicate links', () => {
     const issue = toIssue({
       context,
       issue: rawIssue({ body: 'Blocked by #10. Depends on #10.' }),
@@ -128,7 +128,7 @@ describe('links por palavra-chave', () => {
 });
 
 describe('toIssue', () => {
-  it('mapeia issue completa para o modelo neutro', () => {
+  it('maps a complete issue to the neutral model', () => {
     const issue = toIssue({
       context,
       issue: rawIssue({
@@ -147,7 +147,7 @@ describe('toIssue', () => {
       comments: [
         {
           id: 555,
-          body: 'olha o print ![p](https://user-images.githubusercontent.com/1/p.png)',
+          body: 'see the screenshot ![p](https://user-images.githubusercontent.com/1/p.png)',
           user: { login: 'carla', id: 30, html_url: 'https://github.com/carla' },
           created_at: '2026-01-03T00:00:00Z',
           html_url: 'https://github.com/acme/api/issues/7#issuecomment-555',
@@ -157,7 +157,7 @@ describe('toIssue', () => {
 
     expect(issue).toMatchObject({
       sourceRef: { id: 'github:acme/api:issue:7', humanRef: '#7', platform: 'github' },
-      title: 'Falha no login',
+      title: 'Login failure',
       type: 'bug',
       priority: 'high',
       status: 'in_progress',
@@ -178,13 +178,13 @@ describe('toIssue', () => {
       { type: 'parent_of', targetSourceRef: expect.objectContaining({ humanRef: '#8' }) },
       { type: 'blocked_by', targetSourceRef: expect.objectContaining({ humanRef: '#9' }) },
     ]);
-    // Anexo do comentário fica no comentário, não na issue.
+    // The comment's attachment stays on the comment, not on the issue.
     expect(issue.attachments).toEqual([]);
     expect(issue.comments[0]?.attachments[0]?.filename).toBe('p.png');
     expect(issue.raw).toBeUndefined();
   });
 
-  it('trata autor removido, issue fechada e raw opcional', () => {
+  it('handles a deleted author, a closed issue and optional raw', () => {
     const issue = toIssue({
       context: { ...context, includeRaw: true },
       issue: rawIssue({ user: null, state: 'closed', closed_at: '2026-02-01T00:00:00Z' }),
@@ -199,7 +199,7 @@ describe('toIssue', () => {
 });
 
 describe('applyHierarchy', () => {
-  it('preenche parentSourceRef do filho a partir do parent_of do pai', () => {
+  it('fills in the child parentSourceRef from the parent_of of the parent', () => {
     const parent = toIssue({ context, issue: rawIssue({ number: 1, body: '- [ ] #2' }), comments: [] });
     const child = toIssue({ context, issue: rawIssue({ number: 2 }), comments: [] });
 
@@ -209,7 +209,7 @@ describe('applyHierarchy', () => {
     expect(mappedParent?.parentSourceRef).toBeUndefined();
   });
 
-  it('ignora referência a issue fora da extração', () => {
+  it('ignores references to issues outside the extraction', () => {
     const parent = toIssue({ context, issue: rawIssue({ number: 1, body: '- [ ] #99' }), comments: [] });
     const [mapped] = applyHierarchy([parent]);
     expect(mapped?.parentSourceRef).toBeUndefined();

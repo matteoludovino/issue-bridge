@@ -1,21 +1,21 @@
 /**
- * Tempo e identidade como portas.
+ * Time and identity as ports.
  *
- * Motivo: o Planner precisa gravar `createdAt` e `planId`, mas deve ser função
- * pura e determinística nos testes. Injetar `Clock`/`IdGenerator` mantém a
- * pureza sem recorrer a mocks globais de `Date`.
+ * Rationale: the Planner needs to record `createdAt` and `planId`, but must be a
+ * pure, deterministic function in tests. Injecting `Clock`/`IdGenerator` keeps it
+ * pure without resorting to global `Date` mocks.
  */
 export interface Clock {
-  /** Instante atual em ISO 8601 com offset. */
+  /** Current instant in ISO 8601 with offset. */
   now(): string;
 }
 
 export interface IdGenerator {
-  /** Id opaco e único (planId, runId). */
+  /** Opaque, unique id (planId, runId). */
   next(): string;
 }
 
-/** Espera cooperativa, injetada para o backoff do Executor não travar testes. */
+/** Cooperative wait, injected so the Executor's backoff does not stall tests. */
 export interface Sleeper {
   sleep(ms: number): Promise<void>;
 }

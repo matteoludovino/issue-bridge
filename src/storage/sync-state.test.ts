@@ -19,11 +19,11 @@ describe('SyncStateStore', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('sem arquivo devolve null, o que força sync completo', async () => {
+  it('returns null when there is no file, which forces a full sync', async () => {
     expect(await store.read('acme/api')).toBeNull();
   });
 
-  it('grava e relê a marca d’água, criando o diretório', async () => {
+  it('writes and re-reads the watermark, creating the directory', async () => {
     await store.write({ version: 1, identifier: 'acme/api', lastSyncedAt: '2026-03-01T00:00:00Z' });
 
     expect(await new SyncStateStore(statePath).read('acme/api')).toEqual({
@@ -33,24 +33,24 @@ describe('SyncStateStore', () => {
     });
   });
 
-  it('ignora marca de outro escopo em vez de sincronizar a partir dela', async () => {
+  it('ignores a watermark from another scope instead of syncing from it', async () => {
     await store.write({ version: 1, identifier: 'acme/api', lastSyncedAt: '2026-03-01T00:00:00Z' });
 
-    // Sincronizar `outro/repo` desde a data de `acme/api` perderia issues.
-    expect(await store.read('outro/repo')).toBeNull();
+    // Syncing `other/repo` from `acme/api`'s date would miss issues.
+    expect(await store.read('other/repo')).toBeNull();
   });
 
-  it('recusa marca corrompida em vez de assumir uma data errada', async () => {
+  it('rejects a corrupted watermark instead of assuming a wrong date', async () => {
     await store.write({ version: 1, identifier: 'acme/api', lastSyncedAt: '2026-03-01T00:00:00Z' });
 
     await writeFile(statePath, '{"version":1,"identifier":"acme/api"}', 'utf8');
     await expect(store.read('acme/api')).rejects.toMatchObject({ code: 'validation' });
 
-    await writeFile(statePath, 'não é json', 'utf8');
+    await writeFile(statePath, 'not json', 'utf8');
     await expect(store.read('acme/api')).rejects.toMatchObject({ code: 'validation' });
   });
 
-  it('não deixa arquivo temporário para trás', async () => {
+  it('leaves no temporary file behind', async () => {
     await store.write({ version: 1, identifier: 'acme/api', lastSyncedAt: '2026-03-01T00:00:00Z' });
     await expect(new SyncStateStore(`${statePath}.tmp`).read('acme/api')).resolves.toBeNull();
   });

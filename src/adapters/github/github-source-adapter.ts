@@ -16,19 +16,19 @@ import {
 } from './schemas.js';
 
 export interface GitHubSourceAdapterOptions {
-  /** Personal access token ou token de app. Injetado pela camada de config. */
+  /** Personal access token or app token. Injected by the config layer. */
   token: string;
-  /** Base da API. Troque para GitHub Enterprise Server. */
+  /** API base URL. Change it for GitHub Enterprise Server. */
   baseUrl?: string;
-  /** Base web, usada para montar URL de issue referenciada mas não extraída. */
+  /** Web base URL, used to build links to issues that are referenced but not extracted. */
   webBaseUrl?: string;
-  /** Injete nos testes; em produção usa o `fetch` global. */
+  /** Inject in tests; production uses the global `fetch`. */
   httpClient?: HttpClient;
-  /** Como labels do GitHub viram tipo/prioridade/status neutros. */
+  /** How GitHub labels become neutral type/priority/status. */
   classification?: LabelClassification;
-  /** Guarda o payload original em `Issue.raw`. Dobra o tamanho do snapshot. */
+  /** Keeps the original payload in `Issue.raw`. Doubles the snapshot size. */
   includeRaw?: boolean;
-  /** Injete nos testes para `extractedAt` determinístico. */
+  /** Inject in tests for a deterministic `extractedAt`. */
   clock?: Clock;
   userAgent?: string;
 }
@@ -36,14 +36,14 @@ export interface GitHubSourceAdapterOptions {
 const DEFAULT_WEB_BASE_URL = 'https://github.com';
 
 /**
- * Implementa `SourceAdapter` sobre a REST API do GitHub, sem SDK — só `fetch`
- * atrás da interface `HttpClient`.
+ * Implements `SourceAdapter` on top of the GitHub REST API, without an SDK — just `fetch`
+ * behind the `HttpClient` interface.
  *
- * Limitações conhecidas (documentadas em vez de silenciosas):
- *  - Anexos só existem como URL no markdown; não há endpoint de anexos em issues.
- *  - Hierarquia vem de task list (`- [ ] #12`), única fonte disponível sem a API
- *    de sub-issues.
- *  - Pull requests são descartados: a API de issues os devolve misturados.
+ * Known limitations (documented rather than silent):
+ *  - Attachments only exist as URLs in the markdown; issues have no attachments endpoint.
+ *  - Hierarchy comes from task lists (`- [ ] #12`), the only source available without the
+ *    sub-issues API.
+ *  - Pull requests are discarded: the issues API returns them mixed in.
  */
 export class GitHubSourceAdapter implements SourceAdapter {
   readonly platformName = 'github';
@@ -82,8 +82,8 @@ export class GitHubSourceAdapter implements SourceAdapter {
     if (options.labelFilter !== undefined && options.labelFilter.length > 0) {
       query.set('labels', options.labelFilter.join(','));
     }
-    // `since` do GitHub filtra por `updated_at`, exatamente a semântica de
-    // `updatedSince`: issue alterada volta inteira, com os comentários novos.
+    // GitHub's `since` filters on `updated_at`, which is exactly the semantics of
+    // `updatedSince`: a changed issue comes back in full, with its new comments.
     if (options.updatedSince !== undefined) {
       query.set('since', options.updatedSince);
     }
@@ -94,8 +94,8 @@ export class GitHubSourceAdapter implements SourceAdapter {
       options.maxItems,
     );
 
-    // `maxItems` limita ITENS LIDOS da API; como PRs vêm misturados e são
-    // descartados, o resultado pode ter menos issues que o teto pedido.
+    // `maxItems` caps the ITEMS READ from the API; since PRs come mixed in and are
+    // discarded, the result may contain fewer issues than the requested cap.
     const rawIssues = rawItems
       .filter((item) => item.pull_request === undefined)
       .slice(0, options.maxItems ?? rawItems.length);
@@ -117,7 +117,7 @@ export class GitHubSourceAdapter implements SourceAdapter {
       this.http.paginate(`/repos/${scope}/milestones?state=all`, GitHubMilestoneSchema),
     ]);
 
-    // Validação da fronteira de SAÍDA: o core só recebe modelo válido.
+    // OUTPUT boundary validation: the core only ever receives a valid model.
     return IssueModelSchema.parse({
       source: { platform: this.platformName, identifier: scope, extractedAt: this.clock.now() },
       issues: applyHierarchy(issues),
@@ -127,7 +127,7 @@ export class GitHubSourceAdapter implements SourceAdapter {
   }
 }
 
-/** `owner/repo` → validado antes de virar path de API. */
+/** `owner/repo` → validated before it becomes an API path. */
 function parseIdentifier(identifier: string): string {
   const parts = identifier.split('/').filter((part) => part.length > 0);
   const [owner, repo] = parts;

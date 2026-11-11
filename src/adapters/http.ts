@@ -1,28 +1,28 @@
 import { MigrationError } from '../core/errors.js';
 
 /**
- * Contrato HTTP compartilhado pelos adapters.
+ * HTTP contract shared by the adapters.
  *
- * Fica fora de `github/` e `jira/` porque os dois usam o mesmo cliente. Existe
- * para que os adapters sejam testáveis sem rede e sem depender de tipos DOM
- * (`Response`, `Headers`) — o `tsconfig` só carrega `lib: ES2022`.
+ * Lives outside `github/` and `jira/` because both use the same client. It exists
+ * so the adapters can be tested without a network and without depending on DOM types
+ * (`Response`, `Headers`) — the `tsconfig` only loads `lib: ES2022`.
  */
 export interface HttpRequest {
   url: string;
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers: Record<string, string>;
   body?: string | Uint8Array;
-  /** `binary` preenche `HttpResponse.bytes` em vez de `body`. */
+  /** `binary` fills `HttpResponse.bytes` instead of `body`. */
   responseType?: 'text' | 'binary';
 }
 
 export interface HttpResponse {
   status: number;
-  /** Nomes de header em minúsculas. */
+  /** Header names in lowercase. */
   headers: Record<string, string>;
-  /** Corpo como texto. Vazio quando a resposta foi pedida como binária. */
+  /** Body as text. Empty when the response was requested as binary. */
   body: string;
-  /** Bytes crus, presentes quando `request.responseType === 'binary'`. */
+  /** Raw bytes, present when `request.responseType === 'binary'`. */
   bytes?: Uint8Array;
 }
 
@@ -42,7 +42,7 @@ type FetchLike = (
   init: { method: string; headers: Record<string, string>; body?: string | Uint8Array },
 ) => Promise<FetchLikeResponse>;
 
-/** Cliente padrão sobre o `fetch` global do Node ≥ 18. Sem dependências. */
+/** Default client on top of the global `fetch` in Node ≥ 18. No dependencies. */
 export class FetchHttpClient implements HttpClient {
   async send(request: HttpRequest): Promise<HttpResponse> {
     const globalFetch = (globalThis as { fetch?: unknown }).fetch;
@@ -61,7 +61,7 @@ export class FetchHttpClient implements HttpClient {
         ...(request.body === undefined ? {} : { body: request.body }),
       });
     } catch (cause: unknown) {
-      // Falha de socket/DNS é transitória por definição — o Executor decide o retry.
+      // A socket/DNS failure is transient by definition — the Executor decides on retries.
       throw new MigrationError({
         code: 'transient',
         message: `Network failure for ${redactUrl(request.url)}: ${
@@ -89,7 +89,7 @@ export class FetchHttpClient implements HttpClient {
   }
 }
 
-/** `<https://…&page=2>; rel="next"` → URL de `next`. Usado na paginação por Link. */
+/** `<https://…&page=2>; rel="next"` → the `next` URL. Used for Link-header pagination. */
 export function nextPageUrl(linkHeader: string | undefined): string | undefined {
   if (linkHeader === undefined) return undefined;
   for (const part of linkHeader.split(',')) {
@@ -100,12 +100,12 @@ export function nextPageUrl(linkHeader: string | undefined): string | undefined 
 }
 
 /**
- * Remove a query string de uma URL antes de ela entrar em mensagem de erro, log
- * ou relatório.
+ * Strips the query string from a URL before it ends up in an error message, log
+ * or report.
  *
- * Não é paranoia: a busca do Jira leva o JQL na query (`?jql=project = "ENG" AND
- * summary ~ "..."`), então uma falha de rede numa reconciliação despejaria título
- * de issue privada no log. O caminho basta para diagnosticar.
+ * This is not paranoia: Jira search carries the JQL in the query (`?jql=project = "ENG" AND
+ * summary ~ "..."`), so a network failure during reconciliation would dump a private
+ * issue title into the log. The path is enough for diagnosis.
  */
 export function redactUrl(url: string): string {
   try {
@@ -113,19 +113,19 @@ export function redactUrl(url: string): string {
     const suffix = parsed.search.length > 0 ? '?[redacted]' : '';
     return `${parsed.origin}${parsed.pathname}${suffix}`;
   } catch {
-    // URL malformada: devolver o caminho sem query, na força bruta.
+    // Malformed URL: return everything before the query, by brute force.
     return url.split('?')[0] ?? url;
   }
 }
 
-/** Trecho do corpo de erro, para mensagens acionáveis sem despejar payload inteiro. */
+/** Excerpt of an error body, for actionable messages without dumping the whole payload. */
 export function summarizeBody(body: string, limit = 300): string {
   const trimmed = body.trim();
   if (trimmed.length === 0) return '';
   return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
 }
 
-/** `retry-after` (segundos) ou janela de reset do rate limit, em ms. */
+/** `retry-after` (seconds) or the rate-limit reset window, in ms. */
 export function retryDelayMs(headers: Record<string, string>): number | undefined {
   const retryAfter = headers['retry-after'];
   if (retryAfter !== undefined) {
@@ -136,6 +136,6 @@ export function retryDelayMs(headers: Record<string, string>): number | undefine
   if (headers['x-ratelimit-remaining'] !== '0') return undefined;
   const reset = Number(headers['x-ratelimit-reset']);
   if (!Number.isFinite(reset)) return undefined;
-  // `reset` é epoch em segundos.
+  // `reset` is a Unix epoch in seconds.
   return Math.max(0, reset * 1000 - Date.now());
 }

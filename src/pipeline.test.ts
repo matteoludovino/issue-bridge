@@ -15,16 +15,16 @@ import {
 } from './core/testing/fixtures.js';
 
 /**
- * Integração das Fases 3 e 4: extract (GitHub) → buildPlan → Executor.
- * Sem rede: HTTP falso na origem, adapter falso no destino.
+ * Integration of Phases 3 and 4: extract (GitHub) → buildPlan → Executor.
+ * No network: fake HTTP on the source side, fake adapter on the target side.
  */
 
 const PAYLOAD: Record<string, unknown> = {
   '/issues?': [
     {
       number: 1,
-      title: 'Épico: novo checkout',
-      body: '- [ ] #2\n- [x] Levantar requisitos',
+      title: 'Epic: new checkout',
+      body: '- [ ] #2\n- [x] Gather requirements',
       state: 'open',
       labels: [{ name: 'epic' }],
       user: { login: 'ana', id: 10, html_url: 'https://github.com/ana' },
@@ -42,8 +42,8 @@ const PAYLOAD: Record<string, unknown> = {
     },
     {
       number: 2,
-      title: 'Corrigir cálculo de frete',
-      body: 'Relates to #1\n\n![erro.png](https://user-images.githubusercontent.com/1/erro.png)',
+      title: 'Fix shipping cost calculation',
+      body: 'Relates to #1\n\n![error.png](https://user-images.githubusercontent.com/1/error.png)',
       state: 'closed',
       closed_at: '2026-02-01T00:00:00Z',
       labels: [{ name: 'bug' }, { name: 'p1' }],
@@ -58,7 +58,7 @@ const PAYLOAD: Record<string, unknown> = {
   '/issues/1/comments': [
     {
       id: 555,
-      body: 'alinhado com o time',
+      body: 'aligned with the team',
       user: { login: 'carla', id: 30, html_url: 'https://github.com/carla' },
       created_at: '2026-01-05T00:00:00Z',
       html_url: 'https://github.com/acme/api/issues/1#issuecomment-555',
@@ -86,7 +86,7 @@ class StubHttpClient implements HttpClient {
   }
 }
 
-/** Jira falso: `POST /issue` devolve chaves incrementais para as asserções valerem. */
+/** Fake Jira: `POST /issue` returns incrementing keys so the assertions hold. */
 class StubJiraClient implements HttpClient {
   readonly sent: HttpRequest[] = [];
   private issueCounter = 0;
@@ -131,7 +131,7 @@ class StubJiraClient implements HttpClient {
         ? ok({ transitions: [{ id: '31', name: 'Finish', to: { id: '2', name: 'Done' } }] })
         : Promise.resolve({ status: 204, headers: {}, body: '' });
     }
-    if (request.url.includes('/attachments')) return ok([{ id: '900', filename: 'erro.png' }]);
+    if (request.url.includes('/attachments')) return ok([{ id: '900', filename: 'error.png' }]);
     if (request.url.includes('/comment')) return ok({ id: '800' });
     if (request.url.includes('/issueLink')) {
       return Promise.resolve({ status: 201, headers: {}, body: '' });
@@ -141,7 +141,7 @@ class StubJiraClient implements HttpClient {
       const id = String(10_500 + this.issueCounter);
       return ok({ id, key: `ENG-${String(this.issueCounter)}` });
     }
-    return Promise.resolve({ status: 404, headers: {}, body: '{"errorMessages":["sem rota"]}' });
+    return Promise.resolve({ status: 404, headers: {}, body: '{"errorMessages":["no route"]}' });
   }
 
   postedFields(): Record<string, unknown>[] {
@@ -160,7 +160,7 @@ class StubJiraClient implements HttpClient {
 }
 
 describe('pipeline extract → plan → execute', () => {
-  it('migra um épico com subtarefa fechada, em dry-run e depois de verdade', async () => {
+  it('migrates an epic with a closed subtask, as a dry run and then for real', async () => {
     const source = new GitHubSourceAdapter({
       token: 'ghp_test',
       httpClient: new StubHttpClient(),
@@ -169,7 +169,7 @@ describe('pipeline extract → plan → execute', () => {
 
     const model = await source.extract({ identifier: 'acme/api' });
     expect(model.issues.map((issue) => issue.type)).toEqual(['epic', 'bug']);
-    // Task list `- [ ] #2` no épico virou hierarquia da issue #2.
+    // Task list `- [ ] #2` in the epic became the hierarchy of issue #2.
     expect(model.issues[1]?.parentSourceRef?.id).toBe('github:acme/api:issue:1');
 
     const plan = buildPlan(
@@ -183,7 +183,7 @@ describe('pipeline extract → plan → execute', () => {
     expect(hasBlockingErrors(plan)).toBe(false);
     expect(plan.actions.map((action) => action.kind)).toEqual([
       'create_epic',
-      // As 3 labels do repositório não existem no destino.
+      // The repository's 3 labels do not exist in the target.
       'create_label',
       'create_label',
       'create_label',
@@ -220,13 +220,13 @@ describe('pipeline extract → plan → execute', () => {
       'transitionIssue',
     ]);
 
-    // Reexecutar não escreve nada: o ledger cobre tudo.
+    // Re-running writes nothing: the ledger covers everything.
     const rerun = await executor.execute(plan);
     expect(rerun.skipped).toHaveLength(plan.actions.length);
     expect(rerun.succeeded).toEqual([]);
   });
 
-  it('roda contra o JiraTargetAdapter real, com capabilities descobertas do destino', async () => {
+  it('runs against the real JiraTargetAdapter, with capabilities discovered from the target', async () => {
     const model = await new GitHubSourceAdapter({
       token: 'ghp_test',
       httpClient: new StubHttpClient(),
@@ -241,7 +241,7 @@ describe('pipeline extract → plan → execute', () => {
       httpClient: jiraClient,
     });
 
-    // Capabilities vêm do DESTINO, não de fixture: é o contrato da Fase 3.
+    // Capabilities come from the TARGET, not from a fixture: that is the Phase 3 contract.
     const capabilities = await jira.discoverCapabilities('ENG');
     expect(capabilities.issueTypes).toEqual(['Task', 'Epic']);
     expect(capabilities.workflow.statuses).toEqual(['To Do', 'Done']);
@@ -283,15 +283,15 @@ describe('pipeline extract → plan → execute', () => {
     expect(result.failed).toEqual([]);
     expect(result.succeeded).toHaveLength(plan.actions.length);
 
-    // Épico + 2 issues foram criados como issues, com ADF no description.
+    // Epic + 2 issues were created as issues, with ADF in the description.
     const posted = jiraClient.postedFields();
     expect(posted).toHaveLength(3);
-    // [0] épico do milestone; [1] issue #1 (label `epic`), filha do épico;
-    // [2] issue #2, filha de #1 via task list.
+    // [0] the milestone's epic; [1] issue #1 (label `epic`), child of the epic;
+    // [2] issue #2, child of #1 via the task list.
     expect(posted[0]).toMatchObject({ issuetype: { name: 'Epic' }, summary: 'Sprint 3' });
     expect(posted[1]).toMatchObject({
       issuetype: { name: 'Epic' },
-      summary: 'Épico: novo checkout',
+      summary: 'Epic: new checkout',
       parent: { id: '10501' },
     });
     expect(posted[1]?.['description']).toMatchObject({ type: 'doc', version: 1 });

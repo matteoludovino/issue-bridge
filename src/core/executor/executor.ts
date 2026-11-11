@@ -9,7 +9,7 @@ import type { AttachmentFetcher } from '../ports/attachment-fetcher.js';
 import type { Sleeper } from '../ports/clock.js';
 import type { TargetAdapter, TargetItemRef } from '../ports/target-adapter.js';
 
-/** Logger mínimo. Implementação real (Pino) fica na camada de infraestrutura. */
+/** Minimal logger. The real implementation (Pino) lives in the infrastructure layer. */
 export interface Logger {
   info(message: string, context?: Record<string, unknown>): void;
   warn(message: string, context?: Record<string, unknown>): void;
@@ -17,18 +17,18 @@ export interface Logger {
 }
 
 export interface RollbackEntry {
-  /** Chave de idempotência (ver `storeKeyFor`). */
+  /** Idempotency key (see `storeKeyFor`). */
   sourceId: string;
   targetRef: TargetItemRef;
 }
 
 /**
- * Ledger de correspondência origem → destino.
+ * Source → target mapping ledger.
  *
- * Serve a três propósitos, nessa ordem: idempotência (o Executor consulta antes
- * de criar), `sync` (resolve para onde escrever atualizações) e `rollback`
- * (lista o que foi criado, para remoção best-effort). A implementação durável
- * (JSON/SQLite) vem em fase posterior.
+ * Serves three purposes, in this order: idempotency (the Executor checks it
+ * before creating), `sync` (resolves where to write updates) and `rollback`
+ * (lists what was created, for best-effort removal). The durable implementation
+ * (JSON/SQLite) comes in a later phase.
  */
 export interface RollbackStore {
   get(sourceId: string): Promise<TargetItemRef | null>;
@@ -44,9 +44,9 @@ export interface ExecutionError {
 
 export interface SucceededOutcome {
   action: PlanAction;
-  /** `null` quando o destino não devolve referência (alguns tipos de link). */
+  /** `null` when the target returns no reference (some link types). */
   targetRef: TargetItemRef | null;
-  /** Tentativas gastas (1 = sem retry). `0` em dry-run. */
+  /** Attempts used (1 = no retry). `0` in dry-run. */
   attempts: number;
 }
 
@@ -62,7 +62,7 @@ export interface FailedOutcome {
   attempts: number;
 }
 
-/** Política de retry. Aplica-se só a `MigrationError` com `retryable: true`. */
+/** Retry policy. Applies only to `MigrationError` with `retryable: true`. */
 export interface RetryPolicy {
   maxAttempts: number;
   baseDelayMs: number;
@@ -86,27 +86,27 @@ export interface ExecutionResult {
 
 export interface ExecuteOptions {
   /**
-   * Percorre resolução de dependências e idempotência exatamente como uma
-   * execução real, mas nunca chama métodos de criação do `TargetAdapter`.
-   * É o que dá suporte ao `analyze` sem duplicar a lógica de ordenação.
+   * Goes through dependency resolution and idempotency exactly like a real
+   * run, but never calls the `TargetAdapter` creation methods.
+   * This is what backs `analyze` without duplicating the ordering logic.
    */
   dryRun?: boolean;
-  /** Sobrescreve `DEFAULT_RETRY_POLICY` (vem da config em produção). */
+  /** Overrides `DEFAULT_RETRY_POLICY` (comes from the config in production). */
   retry?: RetryPolicy;
   /**
-   * Chamado depois de cada ação. Existe para a CLI mostrar progresso real sem
-   * inferir estado a partir de mensagens de log.
+   * Called after each action. Lets the CLI show real progress without
+   * inferring state from log messages.
    */
   onProgress?: (progress: { done: number; total: number; failures: number }) => void;
   /**
-   * Ações independentes executadas em paralelo. O padrão é 1 (sequencial, na
-   * ordem do plano) para que o comportamento de biblioteca seja determinístico;
-   * a CLI passa o valor da config.
+   * Independent actions run in parallel. Defaults to 1 (sequential, in plan
+   * order) so that library behavior is deterministic;
+   * the CLI passes the value from the config.
    */
   concurrency?: number;
 }
 
-/** Lançado quando o plano tem findings `error`. Nada é executado. */
+/** Thrown when the plan has `error` findings. Nothing is executed. */
 export class MigrationBlockedError extends Error {
   readonly findings: PlanFinding[];
 
@@ -123,14 +123,14 @@ export class MigrationBlockedError extends Error {
 }
 
 /**
- * Chave de idempotência de uma ação no RollbackStore.
+ * Idempotency key of an action in the RollbackStore.
  *
- * Ações que criam uma entidade com identidade própria na origem são indexadas
- * pelo `sourceRef.id` — é isso que permite `sync` e resolução de dependências
- * entre execuções. Ações sem entidade própria (label, componente, link,
- * transição) usam o id da ação, que já é determinístico; sem isso, uma
- * `transition_issue` colidiria com a `create_issue` da mesma issue e seria
- * pulada indevidamente.
+ * Actions that create an entity with its own identity in the source are keyed
+ * by `sourceRef.id` — that is what enables `sync` and dependency resolution
+ * across runs. Actions without an entity of their own (label, component, link,
+ * transition) use the action id, which is already deterministic; otherwise a
+ * `transition_issue` would collide with the `create_issue` of the same issue and
+ * be wrongly skipped.
  */
 export function storeKeyFor(action: PlanAction): string {
   switch (action.kind) {
@@ -159,7 +159,7 @@ interface ScheduleContext {
   onProgress: ExecuteOptions['onProgress'];
 }
 
-/** Referências de destino já resolvidas para uma ação. */
+/** Target references already resolved for an action. */
 interface ResolvedDependencies {
   epicRef?: TargetItemRef;
   versionRef?: TargetItemRef;
@@ -175,11 +175,11 @@ export class Executor {
     private readonly store: RollbackStore,
     private readonly logger: Logger,
     /**
-     * Obrigatório apenas quando o plano tem `create_attachment`. Ausente, essas
-     * ações falham individualmente — o resto da migração segue.
+     * Required only when the plan has `create_attachment`. When absent, those
+     * actions fail individually — the rest of the migration proceeds.
      */
     private readonly attachments?: AttachmentFetcher,
-    /** Injetável para que os testes de backoff não gastem tempo real. */
+    /** Injectable so backoff tests do not spend real time. */
     private readonly sleeper: Sleeper = { sleep: realSleep },
   ) {}
 
@@ -212,7 +212,7 @@ export class Executor {
       plan,
       result,
       actionById: new Map(plan.actions.map((action) => [action.id, action])),
-      // Cache intra-execução; em dry-run é o único registro, já que nada é gravado.
+      // Per-run cache; in dry-run it is the only record, since nothing is persisted.
       resolved: new Map<string, TargetItemRef>(),
       dryRun,
       retry,
@@ -220,8 +220,8 @@ export class Executor {
       onProgress: opts.onProgress,
     });
 
-    // Resultados voltam para a ordem do PLANO, não a de conclusão: relatório,
-    // diffs e testes precisam ser determinísticos mesmo com paralelismo.
+    // Results are put back in PLAN order, not completion order: the report,
+    // diffs and tests must be deterministic even with parallelism.
     const inPlanOrder = <T extends { action: PlanAction }>(items: T[]): T[] =>
       [...items].sort(
         (left, right) =>
@@ -241,12 +241,12 @@ export class Executor {
   }
 
   /**
-   * Escalonador com dependências.
+   * Dependency-aware scheduler.
    *
-   * Uma ação entra em execução quando todo `dependsOn` já concluiu. Se alguma
-   * dependência falhou, a ação é marcada como falha na hora — sem gastar
-   * tentativa numa referência que nunca vai existir. Com `concurrency: 1` o
-   * comportamento é idêntico ao laço sequencial, na ordem do plano.
+   * An action starts once every `dependsOn` has completed. If any dependency
+   * failed, the action is marked as failed right away — without spending an
+   * attempt on a reference that will never exist. With `concurrency: 1` the
+   * behavior is identical to the sequential loop, in plan order.
    */
   private async schedule(context: ScheduleContext): Promise<void> {
     const { plan, result, concurrency } = context;
@@ -284,7 +284,7 @@ export class Executor {
           continue;
         }
 
-        // `splice` desloca a fila, então o índice não avança.
+        // `splice` shifts the queue, so the index does not advance.
         queue.splice(index, 1);
 
         if (readiness === 'blocked') {
@@ -302,8 +302,8 @@ export class Executor {
 
       if (inFlight.size === 0) {
         if (queue.length === 0) break;
-        // Nada pronto e nada rodando: só acontece se `dependsOn` aponta para
-        // fora do plano. Falhar explicitamente é melhor que travar.
+        // Nothing ready and nothing running: only happens if `dependsOn` points
+        // outside the plan. Failing explicitly is better than hanging.
         for (const action of queue) {
           fail(action, `Action "${action.id}" depends on something that does not exist in the plan.`);
         }
@@ -314,7 +314,7 @@ export class Executor {
     }
   }
 
-  /** Corpo de uma ação: idempotência, dependências, escrita e registro. */
+  /** Body of an action: idempotency, dependencies, write and record. */
   private async runAction(action: PlanAction, context: ScheduleContext): Promise<'ok' | 'fail'> {
     const { plan, result, resolved, actionById, dryRun, retry } = context;
     const key = storeKeyFor(action);
@@ -377,9 +377,9 @@ export class Executor {
   }
 
   /**
-   * Executa a ação com retry exponencial, apenas para erro classificado como
-   * retentável pelo adapter (`rate-limit`, `transient`). Erro de validação ou
-   * permissão falha na primeira tentativa — retentar não mudaria o resultado.
+   * Runs the action with exponential retry, only for errors the adapter classified
+   * as retryable (`rate-limit`, `transient`). Validation or permission errors
+   * fail on the first attempt — retrying would not change the outcome.
    */
   private async attemptDispatch(
     action: PlanAction,
@@ -417,9 +417,9 @@ export class Executor {
   }
 
   /**
-   * Traduz ids de ação (`epicActionId`, `issueActionId`, `dependsOn`) em
-   * `TargetItemRef` reais, via cache da execução ou via RollbackStore (permite
-   * retomar uma migração interrompida).
+   * Translates action ids (`epicActionId`, `issueActionId`, `dependsOn`) into
+   * actual `TargetItemRef`s, via the run cache or the RollbackStore (which allows
+   * resuming an interrupted migration).
    */
   private async resolveDependencies(
     action: PlanAction,
@@ -449,8 +449,8 @@ export class Executor {
       return stored;
     };
 
-    // `dependsOn` é a rede de segurança: garante que nada rode antes do que
-    // precisa, mesmo que a ação não use a referência diretamente.
+    // `dependsOn` is the safety net: it ensures nothing runs before what it
+    // needs, even if the action does not use the reference directly.
     if (!isCatalog(action)) {
       for (const dependencyId of action.dependsOn) await lookup(dependencyId);
     }
@@ -547,8 +547,8 @@ export class Executor {
             message: `Action "${action.id}" requires an AttachmentFetcher, and the executor was built without one.`,
           });
         }
-        // O download acontece AQUI, não no adapter de destino: só a origem tem a
-        // credencial capaz de baixar o arquivo.
+        // The download happens HERE, not in the target adapter: only the source
+        // side holds the credential able to download the file.
         const payload = await this.attachments.fetch(action.url, action.filename);
         return this.target.createAttachment({
           issueRef,
@@ -564,8 +564,8 @@ export class Executor {
           toRef: requireRef(deps.toRef, action),
           linkType: action.canonicalType,
         });
-        // Destinos que não devolvem referência de link ainda precisam de marca de
-        // idempotência, senão o link é recriado a cada execução.
+        // Targets that return no link reference still need an idempotency
+        // marker, otherwise the link is recreated on every run.
         return created ?? { id: action.id, humanRef: action.id };
       }
 
@@ -578,7 +578,7 @@ export class Executor {
   }
 }
 
-/** `waiting` = dependência ainda rodando; `blocked` = dependência falhou. */
+/** `waiting` = a dependency is still running; `blocked` = a dependency failed. */
 function readinessOf(
   action: PlanAction,
   status: Map<string, 'ok' | 'fail'>,
@@ -613,9 +613,9 @@ function requireRef(ref: TargetItemRef | undefined, action: PlanAction): TargetI
 }
 
 /**
- * Backoff exponencial determinístico (sem jitter, para o resultado ser
- * reproduzível). `retryAfterMs` do servidor NÃO é limitado por `maxDelayMs`:
- * quando o destino diz quanto esperar, ignorar isso só queima tentativas.
+ * Deterministic exponential backoff (no jitter, so the result is
+ * reproducible). The server's `retryAfterMs` is NOT capped by `maxDelayMs`:
+ * when the target says how long to wait, ignoring it only burns attempts.
  */
 export function backoffDelayMs(
   policy: RetryPolicy,

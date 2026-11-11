@@ -17,7 +17,7 @@ describe('JsonRollbackStore', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('começa vazio quando o arquivo não existe e cria o diretório ao gravar', async () => {
+  it('starts empty when the file does not exist and creates the directory on write', async () => {
     const store = await JsonRollbackStore.open(ledgerPath);
 
     expect(await store.list()).toEqual([]);
@@ -30,7 +30,7 @@ describe('JsonRollbackStore', () => {
     });
   });
 
-  it('sobrevive a reabertura: o mapeamento persiste entre execuções', async () => {
+  it('survives reopening: the mapping persists across runs', async () => {
     const first = await JsonRollbackStore.open(ledgerPath);
     await first.set('issue:1', { id: '1', humanRef: 'ENG-1', url: 'https://j/browse/ENG-1' });
     await first.set('issue:2', { id: '2', humanRef: 'ENG-2' });
@@ -42,17 +42,17 @@ describe('JsonRollbackStore', () => {
       humanRef: 'ENG-1',
       url: 'https://j/browse/ENG-1',
     });
-    // `url` ausente permanece ausente, não vira `undefined`.
+    // A missing `url` stays missing instead of becoming `undefined`.
     expect(Object.keys((await reopened.get('issue:2')) ?? {})).toEqual(['id', 'humanRef']);
     expect(await reopened.list()).toHaveLength(2);
   });
 
-  it('devolve null para chave desconhecida', async () => {
+  it('returns null for an unknown key', async () => {
     const store = await JsonRollbackStore.open(ledgerPath);
-    expect(await store.get('nunca-migrado')).toBeNull();
+    expect(await store.get('never-migrated')).toBeNull();
   });
 
-  it('não perde escritas concorrentes', async () => {
+  it('does not lose concurrent writes', async () => {
     const store = await JsonRollbackStore.open(ledgerPath);
 
     await Promise.all(
@@ -68,21 +68,21 @@ describe('JsonRollbackStore', () => {
     expect(await reopened.list()).toHaveLength(25);
   });
 
-  it('não deixa arquivo temporário para trás', async () => {
+  it('leaves no temporary file behind', async () => {
     const store = await JsonRollbackStore.open(ledgerPath);
     await store.set('issue:1', { id: '1', humanRef: 'ENG-1' });
 
     await expect(readFile(`${ledgerPath}.tmp`, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('recusa ledger corrompido em vez de recriar tudo no destino', async () => {
+  it('rejects a corrupted ledger instead of recreating everything in the target', async () => {
     const store = await JsonRollbackStore.open(ledgerPath);
     await store.set('issue:1', { id: '1', humanRef: 'ENG-1' });
 
     await writeFile(ledgerPath, '{"version": 1, "entries": {"issue:1": {"id": 42}}}', 'utf8');
     await expect(JsonRollbackStore.open(ledgerPath)).rejects.toMatchObject({ code: 'validation' });
 
-    await writeFile(ledgerPath, 'não é json', 'utf8');
+    await writeFile(ledgerPath, 'not json', 'utf8');
     await expect(JsonRollbackStore.open(ledgerPath)).rejects.toMatchObject({ code: 'validation' });
   });
 });

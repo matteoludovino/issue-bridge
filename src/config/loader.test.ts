@@ -15,7 +15,7 @@ target:
 `;
 
 describe('parseConfig', () => {
-  it('aceita config mínima e aplica todos os defaults', () => {
+  it('accepts a minimal config and applies all defaults', () => {
     const config = parseConfig(MINIMAL, 'config.yaml');
 
     expect(config.source).toEqual({
@@ -48,7 +48,7 @@ describe('parseConfig', () => {
     });
   });
 
-  it('lê valores de custom field, incluindo por tipo de issue', () => {
+  it('reads custom field values, including per issue type', () => {
     const config = parseConfig(
       `${MINIMAL}
 mappings:
@@ -60,7 +60,7 @@ mappings:
         value: Major
     byIssueType:
       Bug:
-        customfield_10050: "regressão"
+        customfield_10050: "regression"
 `,
       'config.yaml',
     );
@@ -69,11 +69,11 @@ mappings:
     expect(config.mappings.defaultPriority).toBe('medium');
     expect(config.mappings.fields.defaults).toEqual({ customfield_10042: { value: 'Major' } });
     expect(config.mappings.fields.byIssueType['Bug']).toEqual({
-      customfield_10050: 'regressão',
+      customfield_10050: 'regression',
     });
   });
 
-  it('rejeita chave desconhecida em vez de ignorar silenciosamente', () => {
+  it('rejects an unknown key instead of silently ignoring it', () => {
     const withTypo = `${MINIMAL}
 mappings:
   milestoneStategy: epic
@@ -82,15 +82,15 @@ mappings:
     expect(() => parseConfig(withTypo, 'config.yaml')).toThrow(/milestoneStategy/);
   });
 
-  it('reporta todos os problemas de uma vez', () => {
+  it('reports all problems at once', () => {
     const broken = `
 version: 1
 source:
   platform: gitlab
-  identifier: sem-barra
+  identifier: no-slash
 target:
   platform: jira
-  baseUrl: não-é-url
+  baseUrl: not-a-url
   projectKey: ENG
 `;
 
@@ -109,12 +109,12 @@ target:
     expect(error?.message).toContain('target.baseUrl');
   });
 
-  it('rejeita YAML malformado e arquivo vazio com mensagem clara', () => {
+  it('rejects malformed YAML and an empty file with a clear message', () => {
     expect(() => parseConfig('version: 1\n  source: [', 'config.yaml')).toThrow(/Invalid YAML/);
     expect(() => parseConfig('', 'config.yaml')).toThrow(/is empty/);
   });
 
-  it('exige versão explícita do formato', () => {
+  it('requires an explicit format version', () => {
     expect(() => parseConfig(MINIMAL.replace('version: 1', 'version: 2'), 'config.yaml')).toThrow(
       /version/,
     );
@@ -122,7 +122,7 @@ target:
 });
 
 describe('issue-bridge.example.yaml', () => {
-  it('é válido — o exemplo não pode divergir do schema', async () => {
+  it('is valid — the example must not diverge from the schema', async () => {
     const path = fileURLToPath(new URL('../../issue-bridge.example.yaml', import.meta.url));
     const config = parseConfig(await readFile(path, 'utf8'), path);
 
@@ -135,7 +135,7 @@ describe('issue-bridge.example.yaml', () => {
 describe('resolveCredentials', () => {
   const config = parseConfig(MINIMAL, 'config.yaml');
 
-  it('resolve as três credenciais das variáveis configuradas', () => {
+  it('resolves the three credentials from the configured variables', () => {
     expect(
       resolveCredentials(config, {
         GITHUB_TOKEN: 'ghp_x',
@@ -149,7 +149,7 @@ describe('resolveCredentials', () => {
     });
   });
 
-  it('lista TODAS as variáveis ausentes de uma vez', () => {
+  it('lists ALL missing variables at once', () => {
     const error = (() => {
       try {
         resolveCredentials(config, { JIRA_EMAIL: 'bot@acme.com' });
@@ -164,7 +164,7 @@ describe('resolveCredentials', () => {
     expect(error?.message).not.toContain('JIRA_EMAIL (');
   });
 
-  it('trata variável vazia como ausente', () => {
+  it('treats an empty variable as missing', () => {
     expect(() =>
       resolveCredentials(config, {
         GITHUB_TOKEN: '   ',

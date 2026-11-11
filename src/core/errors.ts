@@ -1,36 +1,36 @@
 /**
- * Taxonomia de erros dos adapters.
+ * Adapter error taxonomy.
  *
- * Existe para que o Executor decida retry/backoff sem inspecionar mensagens ou
- * status HTTP de um tracker específico. Traduzir erro nativo → esta taxonomia é
- * responsabilidade do adapter.
+ * Lets the Executor decide on retry/backoff without inspecting messages or HTTP
+ * statuses of a specific tracker. Translating a native error → this taxonomy is
+ * the adapter's responsibility.
  */
 export type MigrationErrorCode =
-  /** Credencial inválida ou expirada. Nunca retentar. */
+  /** Invalid or expired credential. Never retry. */
   | 'auth'
-  /** Autenticado, mas sem permissão para a operação. Nunca retentar. */
+  /** Authenticated, but not permitted to perform the operation. Never retry. */
   | 'forbidden'
-  /** Recurso inexistente na origem/destino. */
+  /** Resource does not exist in the source/target. */
   | 'not-found'
-  /** Payload rejeitado (campo obrigatório, valor inválido). Nunca retentar sem mudar o plano. */
+  /** Payload rejected (required field, invalid value). Never retry without changing the plan. */
   | 'validation'
-  /** Rate limit. Retentar respeitando `retryAfterMs`. */
+  /** Rate limit. Retry honoring `retryAfterMs`. */
   | 'rate-limit'
-  /** Falha transitória de rede ou 5xx. Retentar com backoff exponencial. */
+  /** Transient network failure or 5xx. Retry with exponential backoff. */
   | 'transient'
-  /** Recurso já existe no destino — tratado como `skipped`, não como falha. */
+  /** Resource already exists in the target — treated as `skipped`, not as a failure. */
   | 'conflict'
-  /** Qualquer outra falha. Não retentar. */
+  /** Any other failure. Do not retry. */
   | 'unknown';
 
 export interface MigrationErrorOptions {
   code: MigrationErrorCode;
   message: string;
-  /** Sobrescreve o default de `code` quando o adapter tem informação melhor. */
+  /** Overrides the `code` default when the adapter knows better. */
   retryable?: boolean;
-  /** Espera sugerida pelo servidor (header `Retry-After`), em ms. */
+  /** Wait time suggested by the server (`Retry-After` header), in ms. */
   retryAfterMs?: number;
-  /** `EntityRef.key` da entidade envolvida. */
+  /** `EntityRef.key` of the entity involved. */
   subjectKey?: string;
   cause?: unknown;
 }
@@ -40,7 +40,7 @@ const RETRYABLE_BY_DEFAULT: ReadonlySet<MigrationErrorCode> = new Set([
   'transient',
 ]);
 
-/** Erro único que atravessa a fronteira adapter → core. */
+/** The single error type that crosses the adapter → core boundary. */
 export class MigrationError extends Error {
   readonly code: MigrationErrorCode;
   readonly retryable: boolean;

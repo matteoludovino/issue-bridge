@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 /**
- * Schemas dos payloads da REST v3 do Jira Cloud que o adapter consome.
- * Só os campos usados; o Zod descarta o resto.
+ * Schemas for the Jira Cloud REST v3 payloads the adapter consumes.
+ * Only the fields in use; Zod strips the rest.
  */
 
 export const JiraMyselfSchema = z.object({
@@ -32,7 +32,7 @@ export const JiraCreateMetaIssueTypesSchema = z.object({
     .default([]),
 });
 
-/** `GET /issue/createmeta/{key}/issuetypes/{id}` — a fonte da verdade sobre campos obrigatórios. */
+/** `GET /issue/createmeta/{key}/issuetypes/{id}` — the source of truth for required fields. */
 export const JiraCreateMetaFieldsSchema = z.object({
   fields: z
     .array(
@@ -48,7 +48,7 @@ export const JiraCreateMetaFieldsSchema = z.object({
     .default([]),
 });
 
-/** `GET /project/{key}/statuses` — statuses por tipo de issue, em ordem de workflow. */
+/** `GET /project/{key}/statuses` — statuses per issue type, in workflow order. */
 export const JiraProjectStatusesSchema = z.array(
   z.object({
     id: z.string(),
@@ -57,7 +57,7 @@ export const JiraProjectStatusesSchema = z.array(
   }),
 );
 
-/** `GET /label` — lista global e paginada. */
+/** `GET /label` — global, paginated list. */
 export const JiraLabelsSchema = z.object({
   values: z.array(z.string()).default([]),
   isLast: z.boolean().nullish(),
@@ -98,7 +98,7 @@ export const JiraUserSearchSchema = z.array(
   }),
 );
 
-/** `GET /search/jql` — busca de issues existentes (reconciliação). */
+/** `GET /search/jql` — search for existing issues (reconciliation). */
 export const JiraSearchSchema = z.object({
   issues: z.array(z.object({ id: z.string(), key: z.string() })).default([]),
 });

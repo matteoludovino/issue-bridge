@@ -3,7 +3,7 @@ import { parse as parseYaml, YAMLParseError } from 'yaml';
 import { MigrationError } from '../core/errors.js';
 import { MigrationConfigSchema, type MigrationConfig } from './schema.js';
 
-/** Credenciais resolvidas do ambiente. Nunca vêm do arquivo. */
+/** Credentials resolved from the environment. Never read from the file. */
 export interface Credentials {
   sourceToken: string;
   targetEmail: string;
@@ -13,13 +13,13 @@ export interface Credentials {
 export interface LoadedConfig {
   config: MigrationConfig;
   credentials: Credentials;
-  /** Caminho do arquivo, para mensagens de erro e relatório. */
+  /** File path, for error messages and the report. */
   filePath: string;
 }
 
 export type EnvLike = Record<string, string | undefined>;
 
-/** Lê, valida e resolve credenciais. Falha com mensagem acionável. */
+/** Reads, validates and resolves credentials. Fails with an actionable message. */
 export async function loadConfig(filePath: string, env: EnvLike): Promise<LoadedConfig> {
   let raw: string;
   try {
@@ -36,7 +36,7 @@ export async function loadConfig(filePath: string, env: EnvLike): Promise<Loaded
   return { config, credentials: resolveCredentials(config, env), filePath };
 }
 
-/** YAML → config validada. Separada de `loadConfig` para ser testável sem disco. */
+/** YAML → validated config. Separate from `loadConfig` so it is testable without disk I/O. */
 export function parseConfig(raw: string, filePath: string): MigrationConfig {
   let document: unknown;
   try {
@@ -61,7 +61,7 @@ export function parseConfig(raw: string, filePath: string): MigrationConfig {
   const result = MigrationConfigSchema.safeParse(document);
   if (result.success) return result.data;
 
-  // Reporta TODOS os problemas de uma vez: corrigir config de 6 em 6 é ruim.
+  // Report ALL problems at once: fixing a config piecemeal is painful.
   const problems = result.error.issues
     .map((issue) => `  • ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     .join('\n');
@@ -72,7 +72,7 @@ export function parseConfig(raw: string, filePath: string): MigrationConfig {
   });
 }
 
-/** Resolve as três credenciais e reporta TODAS as ausentes de uma vez. */
+/** Resolves the three credentials and reports ALL missing ones at once. */
 export function resolveCredentials(config: MigrationConfig, env: EnvLike): Credentials {
   const required = [
     { key: 'source.tokenEnv', variable: config.source.tokenEnv },
