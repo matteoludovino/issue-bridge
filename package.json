@@ -1,6 +1,6 @@
 {
   "name": "issue-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Migrate issues between trackers (GitHub → Jira) with a reviewable plan, an idempotency ledger and a markdown report",
   "keywords": [
     "issue-migration",

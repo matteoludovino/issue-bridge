@@ -6,14 +6,35 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-11
+
 ### Added
 
-- MIT license, contribution guide, security policy and GitHub Actions CI.
+- MIT license, contribution guide, security policy, GitHub Actions CI and
+  Dependabot.
 
 ### Changed
 
-- Project language is now English throughout: code comments, documentation, CLI
-  help and user-facing messages.
+- **Node.js 22.12 or newer is required** (was 20). `commander` 15 already needed
+  it, and Node 20 is past end of life. CI runs on Node 22 and 24.
+- Project language is now English throughout: code comments, test names,
+  documentation, CLI help and user-facing messages. Link keywords in issue
+  bodies are still recognized in English and Portuguese (`depends on` /
+  `depende de`, and so on), as is the `em andamento` progress label.
+- Attachments with no recognizable file name are uploaded as `attachment-N`
+  (was `anexo-N`).
+- Dependencies: `zod` 4, `vitest` 5, TypeScript 7.
+
+### Fixed
+
+- The `source.identifier` validation message was still in Portuguese.
+
+### Security
+
+- `zod` 3 had a high-severity advisory (memory exhaustion while validating
+  oversized constrained collections,
+  [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)).
+  Upgrading to `zod` 4 resolves it; `npm audit` reports no vulnerabilities.
 
 ## [0.1.0] - 2026-07-31
 
@@ -49,5 +70,6 @@ plan, an idempotency ledger and a markdown report.
 - 153 tests, none of which reach the network, including a process-level suite
   that drives the real binary against a local HTTP server.
 
-[Unreleased]: https://github.com/matteoludovino/issue-bridge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/matteoludovino/issue-bridge/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/matteoludovino/issue-bridge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/matteoludovino/issue-bridge/releases/tag/v0.1.0
