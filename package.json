@@ -23,7 +23,7 @@
   },
   "type": "module",
   "bin": {
-    "issue-bridge": "./dist/cli/main.js"
+    "issue-bridge": "dist/cli/main.js"
   },
   "files": [
     "dist"
