@@ -4,6 +4,7 @@ Migrate issues between trackers — today GitHub → Jira Cloud — with a revie
 plan, an idempotency ledger and a markdown report.
 
 [![CI](https://github.com/matteoludovino/issue-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/matteoludovino/issue-bridge/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/issue-bridge.svg)](https://www.npmjs.com/package/issue-bridge)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A tracker migration is a one-way operation against someone's real backlog, so
@@ -20,9 +21,20 @@ this tool is built around three properties:
 Runtime dependencies: `zod`, `yaml`, `commander` — none of which have transitive
 dependencies.
 
-> Status: pre-1.0, not yet published to npm. Install from source.
+> Status: pre-1.0. The test suite runs against simulated GitHub and Jira APIs;
+> reports from real migrations, good or bad, are very welcome in the
+> [issues](https://github.com/matteoludovino/issue-bridge/issues).
 
 ## Install
+
+```bash
+npm install -g issue-bridge
+issue-bridge --help
+```
+
+Or run it without installing: `npx issue-bridge --help`. Node 22.12 or newer.
+
+From source:
 
 ```bash
 git clone https://github.com/matteoludovino/issue-bridge.git
@@ -32,12 +44,11 @@ npm run build
 npm link          # optional, puts `issue-bridge` on your PATH
 ```
 
-Node 22.12 or newer.
-
 ## Quick start
 
 ```bash
-cp issue-bridge.example.yaml issue-bridge.yaml   # then edit it
+# start from the commented example, then edit it
+curl -fsSL -o issue-bridge.yaml https://raw.githubusercontent.com/matteoludovino/issue-bridge/main/issue-bridge.example.yaml
 
 export GITHUB_TOKEN=ghp_...
 export JIRA_EMAIL=bot@acme.com
