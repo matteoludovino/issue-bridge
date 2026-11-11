@@ -13,7 +13,7 @@ npm test            # vitest
 npm run build
 ```
 
-Node 20 or newer. There is no test that reaches the network — see below.
+Node 22.12 or newer. There is no test that reaches the network — see below.
 
 ## The one architectural rule
 
@@ -85,7 +85,7 @@ When you add a rule to the planner, prefer a test that asserts the emitted
 - The subject line says what the thing *is*, not what you did.
 - Describe user-visible behaviour changes in the body, and add an entry to
   `CHANGELOG.md` under `## Unreleased`.
-- CI must be green: typecheck, tests and build, on Node 20 and 22.
+- CI must be green: typecheck, tests and build, on Node 22 and 24.
 
 ## Adding a connector
 

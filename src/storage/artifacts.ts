@@ -11,10 +11,10 @@ import {
 } from '../core/models/migration-plan.js';
 
 /**
- * Leitura e escrita dos artefatos da migração, sempre validados por Zod.
+ * Reading and writing of the migration artifacts, always validated with Zod.
  *
- * Um snapshot ou plano gravado por uma versão antiga não pode ser consumido às
- * cegas: seria escrita errada no destino. Toda leitura passa pelo schema.
+ * A snapshot or plan written by an older version must not be consumed
+ * blindly: it would mean wrong writes to the target. Every read goes through the schema.
  */
 
 const TargetItemRefSchema = z.object({
@@ -24,12 +24,12 @@ const TargetItemRefSchema = z.object({
 });
 
 /**
- * A anotação é o que garante, em tempo de compilação, que este schema não pode
- * divergir da interface do core. O terceiro parâmetro é `unknown` porque schemas
- * com `.default()` têm tipo de entrada diferente do de saída — travar entrada e
- * saída no mesmo tipo rejeitaria o próprio `PlanActionSchema`.
+ * The annotation is what guarantees, at compile time, that this schema cannot
+ * diverge from the core interface. The input type is `unknown` because schemas
+ * with `.default()` have an input type that differs from the output type — pinning
+ * input and output to the same type would reject `PlanActionSchema` itself.
  */
-export const ExecutionResultSchema: z.ZodType<ExecutionResult, z.ZodTypeDef, unknown> = z.object({
+export const ExecutionResultSchema: z.ZodType<ExecutionResult, unknown> = z.object({
   succeeded: z.array(
     z.object({
       action: PlanActionSchema,
@@ -60,7 +60,7 @@ export const ExecutionResultSchema: z.ZodType<ExecutionResult, z.ZodTypeDef, unk
   dryRun: z.boolean(),
 });
 
-/** Nomes fixos dos artefatos dentro do diretório de trabalho. */
+/** Fixed artifact names inside the working directory. */
 export const ARTIFACT_FILES = {
   snapshot: 'snapshot.json',
   plan: 'plan.json',

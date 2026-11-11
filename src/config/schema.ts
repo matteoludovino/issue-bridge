@@ -2,14 +2,14 @@ import { z } from 'zod';
 import { IssuePrioritySchema, IssueTypeSchema } from '../core/models/common.js';
 
 /**
- * Schema do arquivo de configuração YAML.
+ * Schema of the YAML configuration file.
  *
- * Duas decisões que valem explicação:
- *  - **`.strict()` em tudo**: chave desconhecida é ERRO, não é ignorada. Num
- *    arquivo de config escrito à mão, `milestoneStategy` silenciosamente
- *    ignorado é pior que uma mensagem de erro.
- *  - **credencial nunca no arquivo**: só o NOME da variável de ambiente, para o
- *    YAML poder ser versionado.
+ * Two decisions worth explaining:
+ *  - **`.strict()` everywhere**: an unknown key is an ERROR, not ignored. In a
+ *    hand-written config file, a silently ignored `milestoneStategy` is worse
+ *    than an error message.
+ *  - **credentials never in the file**: only the NAME of the environment
+ *    variable, so the YAML can be kept under version control.
  */
 
 const RetryConfigSchema = z
@@ -19,14 +19,14 @@ const RetryConfigSchema = z
     maxDelayMs: z.number().int().positive().default(30_000),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 const ClassificationConfigSchema = z
   .object({
-    /** label (minúscula) → tipo neutro. Mesclado sobre o padrão do adapter. */
-    typeByLabel: z.record(IssueTypeSchema).optional(),
-    priorityByLabel: z.record(IssuePrioritySchema).optional(),
-    /** Substitui a lista padrão (não mescla): é a lista completa. */
+    /** label (lowercase) → neutral type. Merged over the adapter's default. */
+    typeByLabel: z.record(z.string(), IssueTypeSchema).optional(),
+    priorityByLabel: z.record(z.string(), IssuePrioritySchema).optional(),
+    /** Replaces the default list (no merging): this is the complete list. */
     inProgressLabels: z.array(z.string()).optional(),
     defaultType: IssueTypeSchema.optional(),
   })
@@ -34,16 +34,16 @@ const ClassificationConfigSchema = z
 
 const SourceConfigSchema = z
   .object({
-    /** Só `github` está implementado; qualquer outro valor falha na config. */
+    /** Only `github` is implemented; any other value fails config validation. */
     platform: z.literal('github'),
     identifier: z
       .string()
-      .regex(/^[^/\s]+\/[^/\s]+$/, 'use o formato "owner/repo"'),
+      .regex(/^[^/\s]+\/[^/\s]+$/, 'use the "owner/repo" format'),
     tokenEnv: z.string().min(1).default('GITHUB_TOKEN'),
-    /** Base da API, para GitHub Enterprise Server. */
-    baseUrl: z.string().url().optional(),
-    webBaseUrl: z.string().url().optional(),
-    /** Guarda o payload bruto em `Issue.raw`; dobra o tamanho do snapshot. */
+    /** API base URL, for GitHub Enterprise Server. */
+    baseUrl: z.url().optional(),
+    webBaseUrl: z.url().optional(),
+    /** Keeps the raw payload in `Issue.raw`; doubles the snapshot size. */
     includeRaw: z.boolean().default(false),
     classification: ClassificationConfigSchema.optional(),
   })
@@ -52,13 +52,13 @@ const SourceConfigSchema = z
 const TargetConfigSchema = z
   .object({
     platform: z.literal('jira'),
-    baseUrl: z.string().url(),
+    baseUrl: z.url(),
     projectKey: z.string().min(1),
     emailEnv: z.string().min(1).default('JIRA_EMAIL'),
     tokenEnv: z.string().min(1).default('JIRA_API_TOKEN'),
     epicIssueTypeName: z.string().min(1).default('Epic'),
-    /** Tipo canônico de link → nome no destino. */
-    linkTypeNames: z.record(z.string()).optional(),
+    /** Canonical link type → name in the target. */
+    linkTypeNames: z.record(z.string(), z.string()).optional(),
   })
   .strict();
 
@@ -73,7 +73,7 @@ const MappingsConfigSchema = z
         subtask: z.string().min(1).default('Sub-task'),
       })
       .strict()
-      .default({}),
+      .prefault({}),
     priorities: z
       .object({
         highest: z.string().min(1).default('Highest'),
@@ -83,7 +83,7 @@ const MappingsConfigSchema = z
         lowest: z.string().min(1).default('Lowest'),
       })
       .strict()
-      .default({}),
+      .prefault({}),
     statuses: z
       .object({
         open: z.string().min(1).default('To Do'),
@@ -91,57 +91,57 @@ const MappingsConfigSchema = z
         closed: z.string().min(1).default('Done'),
       })
       .strict()
-      .default({}),
+      .prefault({}),
     milestoneStrategy: z.enum(['epic', 'version']).default('epic'),
     defaultPriority: IssuePrioritySchema.optional(),
     /**
-     * Valores de campo do destino, por id (`customfield_10042`). É o canal que
-     * satisfaz custom field obrigatório — sem ele, o `analyze` bloqueia.
+     * Target field values, by id (`customfield_10042`). This is how required
+     * custom fields get satisfied — without it, `analyze` blocks.
      */
     fields: z
       .object({
-        defaults: z.record(z.unknown()).default({}),
-        /** Indexado pelo NOME do tipo no destino; vence `defaults`. */
-        byIssueType: z.record(z.record(z.unknown())).default({}),
+        defaults: z.record(z.string(), z.unknown()).default({}),
+        /** Keyed by the issue type NAME in the target; takes precedence over `defaults`. */
+        byIssueType: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
       })
       .strict()
-      .default({}),
+      .prefault({}),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 const ExtractConfigSchema = z
   .object({
     includeClosed: z.boolean().default(true),
     labelFilter: z.array(z.string()).default([]),
-    /** Teto de itens lidos da API (issues + PRs, que são descartados). */
+    /** Cap on items read from the API (issues + PRs, which are discarded). */
     maxItems: z.number().int().positive().optional(),
     /**
-     * Piso fixo de data de alteração (ISO 8601). Serve para recortar um
-     * histórico longo; o `sync` usa a própria marca d'água quando ela é mais
-     * recente que este valor.
+     * Fixed floor on the last-updated date (ISO 8601). Useful for trimming a
+     * long history; `sync` uses its own watermark when that is more
+     * recent than this value.
      */
-    updatedSince: z.string().datetime({ offset: true }).optional(),
+    updatedSince: z.iso.datetime({ offset: true }).optional(),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 const ExecutionConfigSchema = z
   .object({
-    /** Onde fica o ledger origem → destino. */
+    /** Where the source → target ledger is stored. */
     ledgerPath: z.string().min(1).default('.issue-bridge/ledger.json'),
-    /** Marca d'água do `sync`: até quando a origem já foi lida. */
+    /** `sync` watermark: up to when the source has already been read. */
     syncStatePath: z.string().min(1).default('.issue-bridge/sync-state.json'),
     retry: RetryConfigSchema,
     /**
-     * Ações independentes escritas em paralelo. Acima de ~8 o rate limit do
-     * destino costuma virar o gargalo — o retry absorve, mas fica mais lento.
-     * Use 1 para depurar com ordem determinística.
+     * Independent actions written in parallel. Above ~8, the target's rate
+     * limit tends to become the bottleneck — retries absorb it, but it is slower.
+     * Use 1 to debug with a deterministic order.
      */
     concurrency: z.number().int().min(1).max(16).default(4),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 export const MigrationConfigSchema = z
   .object({

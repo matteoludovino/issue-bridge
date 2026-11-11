@@ -32,7 +32,7 @@ npm run build
 npm link          # optional, puts `issue-bridge` on your PATH
 ```
 
-Node 20 or newer.
+Node 22.12 or newer.
 
 ## Quick start
 
@@ -184,10 +184,11 @@ model and the interfaces — nothing else. Adding GitLab as a source means
 implementing `SourceAdapter`; adding Azure DevOps as a target means implementing
 `TargetAdapter`. No line of the core changes.
 
-`src/core/` imports exactly one external package: `zod`. That is checkable:
+Outside its tests, `src/core/` imports exactly one external package: `zod`. That
+is checkable:
 
 ```bash
-grep -rhoE "from '[^.][^']*'" src/core --include='*.ts' | sort -u
+grep -rhoE "from '[^.][^']*'" src/core --include='*.ts' --exclude='*.test.ts' | sort -u
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the layer map and where things belong.

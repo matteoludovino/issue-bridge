@@ -14,27 +14,27 @@ const TargetItemRefSchema = z.object({
 const LedgerFileSchema = z.object({
   version: z.literal(1),
   updatedAt: z.string(),
-  entries: z.record(TargetItemRefSchema),
+  entries: z.record(z.string(), TargetItemRefSchema),
 });
 
 type LedgerFile = z.infer<typeof LedgerFileSchema>;
 
 /**
- * `RollbackStore` persistido em JSON.
+ * JSON-backed `RollbackStore`.
  *
- * Garantias:
- *  - **durável por operação**: cada `set` grava o arquivo inteiro antes de
- *    resolver, então um `apply` interrompido (Ctrl+C, crash, rate limit fatal)
- *    não perde os mapeamentos já criados;
- *  - **atômico**: escreve em `<arquivo>.tmp` e faz `rename`, que é atômico no
- *    mesmo filesystem — nunca deixa um JSON truncado no lugar do ledger;
- *  - **serializado**: escritas são encadeadas numa promise, então chamadas
- *    concorrentes não se intercalam.
+ * Guarantees:
+ *  - **durable per operation**: each `set` writes the whole file before
+ *    resolving, so an interrupted `apply` (Ctrl+C, crash, fatal rate limit)
+ *    does not lose the mappings already created;
+ *  - **atomic**: writes to `<file>.tmp` and then calls `rename`, which is atomic on
+ *    the same filesystem — it never leaves a truncated JSON in place of the ledger;
+ *  - **serialized**: writes are chained on a promise, so concurrent calls
+ *    do not interleave.
  *
- * Custo assumido: reescreve o arquivo inteiro a cada item. Para as ordens de
- * grandeza aqui (milhares de itens, arquivo de poucos MB) é irrelevante frente
- * ao custo de uma chamada HTTP; se virar gargalo, a troca é por SQLite — sem
- * tocar no Executor, que só conhece a interface.
+ * Accepted cost: the whole file is rewritten on every item. At the scale
+ * involved here (thousands of items, a file of a few MB) that is negligible next
+ * to the cost of an HTTP call; if it becomes a bottleneck, swap in SQLite —
+ * without touching the Executor, which only knows the interface.
  */
 export class JsonRollbackStore implements RollbackStore {
   private readonly entries: Map<string, TargetItemRef>;
@@ -47,7 +47,7 @@ export class JsonRollbackStore implements RollbackStore {
     this.entries = entries;
   }
 
-  /** Carrega o ledger existente; arquivo ausente começa vazio. */
+  /** Loads the existing ledger; a missing file starts out empty. */
   static async open(filePath: string): Promise<JsonRollbackStore> {
     const entries = new Map<string, TargetItemRef>();
 
@@ -65,7 +65,7 @@ export class JsonRollbackStore implements RollbackStore {
 
     const parsed = LedgerFileSchema.safeParse(safeJsonParse(raw, filePath));
     if (!parsed.success) {
-      // Ledger corrompido é perigoso: seguir em frente recriaria tudo no destino.
+      // A corrupted ledger is dangerous: carrying on would recreate everything in the target.
       throw new MigrationError({
         code: 'validation',
         message: `Ledger at ${filePath} is invalid (${parsed.error.issues[0]?.message ?? 'unknown format'}). Fix or remove the file before continuing.`,
@@ -93,7 +93,7 @@ export class JsonRollbackStore implements RollbackStore {
     );
   }
 
-  /** Encadeia as escritas para nunca haver dois `writeFile` simultâneos. */
+  /** Chains the writes so there are never two `writeFile` calls at once. */
   private enqueueFlush(): Promise<void> {
     this.writeQueue = this.writeQueue.then(() => this.flush());
     return this.writeQueue;

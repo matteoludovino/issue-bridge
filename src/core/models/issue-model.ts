@@ -10,15 +10,15 @@ import {
 
 export const LabelSchema = z.object({
   name: z.string().min(1),
-  /** Cor em hex sem `#`, quando a origem fornecer. */
+  /** Hex color without `#`, when the source provides one. */
   color: z.string().optional(),
   description: z.string().optional(),
 });
 export type Label = z.infer<typeof LabelSchema>;
 
 /**
- * Agrupamento temporal de issues. O Planner materializa como Epic ou Version
- * conforme `MappingConfig.milestoneStrategy`.
+ * Time-based grouping of issues. The Planner materializes it as an Epic or a
+ * Version according to `MappingConfig.milestoneStrategy`.
  */
 export const MilestoneSchema = z.object({
   sourceRef: SourceRefSchema,
@@ -31,20 +31,20 @@ export const MilestoneSchema = z.object({
 export type Milestone = z.infer<typeof MilestoneSchema>;
 
 /**
- * Anexo de uma issue ou comentário.
+ * Attachment of an issue or comment.
  *
- * `origin` distingue os dois caminhos de descoberta:
- *  - `api`: veio de um endpoint estruturado de anexos;
- *  - `inline_body`: a URL foi extraída por parsing do markdown (imagem colada).
+ * `origin` distinguishes the two discovery paths:
+ *  - `api`: came from a structured attachments endpoint;
+ *  - `inline_body`: the URL was extracted by parsing the markdown (pasted image).
  *
- * `sourceRef` é obrigatório mesmo para `inline_body` — o adapter sintetiza um id
- * determinístico (ex.: `github:acme/api:attachment:123#inline-0`) para que a
- * idempotência do Executor funcione.
+ * `sourceRef` is required even for `inline_body` — the adapter synthesizes a
+ * deterministic id (e.g. `github:acme/api:attachment:123#inline-0`) so that the
+ * Executor's idempotency works.
  */
 export const AttachmentSchema = z.object({
   sourceRef: SourceRefSchema,
   filename: z.string().min(1),
-  /** URL de download na origem; pode exigir autenticação. */
+  /** Download URL in the source; may require authentication. */
   url: z.string().url(),
   contentType: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().optional(),
@@ -55,7 +55,7 @@ export type Attachment = z.infer<typeof AttachmentSchema>;
 export const CommentSchema = z.object({
   sourceRef: SourceRefSchema,
   author: PersonSchema,
-  /** Corpo em markdown da origem; conversão de formato é papel do adapter de destino. */
+  /** Body in the source's markdown; format conversion is the target adapter's job. */
   body: z.string(),
   createdAt: z.string(),
   updatedAt: z.string().optional(),
@@ -65,7 +65,7 @@ export type Comment = z.infer<typeof CommentSchema>;
 
 export const IssueLinkSchema = z.object({
   type: LinkTypeSchema,
-  /** Issue do outro lado da relação, sempre no espaço da ORIGEM. */
+  /** Issue on the other side of the relationship, always in the SOURCE namespace. */
   targetSourceRef: SourceRefSchema,
 });
 export type IssueLink = z.infer<typeof IssueLinkSchema>;
@@ -77,8 +77,8 @@ export const ChecklistItemSchema = z.object({
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 
 /**
- * Issue no modelo intermediário — a única linguagem que o core entende.
- * Nenhum campo cita GitHub ou Jira.
+ * Issue in the intermediate model — the only language the core understands.
+ * No field mentions GitHub or Jira.
  */
 export const IssueSchema = z.object({
   sourceRef: SourceRefSchema,
@@ -88,7 +88,7 @@ export const IssueSchema = z.object({
   status: IssueStatusSchema,
   priority: IssuePrioritySchema.optional(),
   labels: z.array(LabelSchema).default([]),
-  /** `sourceRef.id` do milestone ao qual a issue pertence. */
+  /** `sourceRef.id` of the milestone the issue belongs to. */
   milestone: SourceRefSchema.optional(),
   assignees: z.array(PersonSchema).default([]),
   author: PersonSchema,
@@ -101,18 +101,18 @@ export const IssueSchema = z.object({
   checklist: z.array(ChecklistItemSchema).default([]),
   parentSourceRef: SourceRefSchema.optional(),
   /**
-   * Payload bruto da origem. NUNCA lido por lógica de negócio — existe apenas
-   * para relatórios e auditoria.
+   * Raw source payload. NEVER read by business logic — it exists only for
+   * reporting and auditing.
    */
-  raw: z.record(z.unknown()).optional(),
+  raw: z.record(z.string(), z.unknown()).optional(),
 });
 export type Issue = z.infer<typeof IssueSchema>;
 
-/** Artefato completo de uma extração: o que `export` grava e `analyze`/`apply` consomem. */
+/** Complete artifact of an extraction: what `export` writes and `analyze`/`apply` consume. */
 export const IssueModelSchema = z.object({
   source: z.object({
     platform: z.string().min(1),
-    /** Escopo extraído, no formato da plataforma (`owner/repo`). */
+    /** Extracted scope, in the platform's format (`owner/repo`). */
     identifier: z.string().min(1),
     extractedAt: z.string(),
   }),
