@@ -11,6 +11,7 @@ import { loadConfig } from '../config/loader.js';
 import { isMigrationError } from '../core/errors.js';
 import { ConsoleLogger, type LogLevel } from '../utils/logger.js';
 import { color, symbol } from '../utils/ui.js';
+import { VERSION } from './version.js';
 import {
   EXIT,
   runAnalyze,
@@ -75,7 +76,7 @@ function main(): void {
   program
     .name('issue-bridge')
     .description('Migrate issues between trackers (GitHub → Jira) with a reviewable plan, a ledger and a report.')
-    .version('0.1.0')
+    .version(VERSION)
     .option('-c, --config <file>', 'YAML configuration file', 'issue-bridge.yaml')
     .option('-o, --out-dir <dir>', 'where to write snapshot, plan and report', '.issue-bridge')
     .option('-v, --verbose', 'log every action')

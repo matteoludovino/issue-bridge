@@ -85,10 +85,11 @@ describe('CLI — help and configuration errors', () => {
     }
   });
 
-  it('--version prints the version', async () => {
+  it('--version prints the version in package.json', async () => {
     const result = await runCli(['--version'], { cwd: workdir });
+    const { version } = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')) as { version: string };
     expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.stdout.trim()).toBe(version);
   });
 
   it('an unknown command fails instead of becoming a no-op', async () => {

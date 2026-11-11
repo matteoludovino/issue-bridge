@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-11
+
+### Fixed
+
+- `issue-bridge --version` printed `0.1.0` in 0.2.0: the version was hardcoded.
+  It is now read from `package.json` at runtime, and the process-level test
+  compares the binary's output with it instead of only checking the format.
+
 ## [0.2.0] - 2026-11-11
 
 ### Added
@@ -70,6 +78,7 @@ plan, an idempotency ledger and a markdown report.
 - 153 tests, none of which reach the network, including a process-level suite
   that drives the real binary against a local HTTP server.
 
-[Unreleased]: https://github.com/matteoludovino/issue-bridge/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/matteoludovino/issue-bridge/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/matteoludovino/issue-bridge/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/matteoludovino/issue-bridge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/matteoludovino/issue-bridge/releases/tag/v0.1.0
